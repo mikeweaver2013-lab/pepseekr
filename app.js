@@ -566,6 +566,7 @@ function vProtocol() {
   const pick = { rec: R.rec, low: R.low, few: R.few, value: R.val };
   const sel = (S.open && [R.rec, R.low, R.few, R.val, ...R.nonstops].find(r => r && r.key === S.open && r.mode === (S.openMode || "cheapest"))) || pick[tab];
   const nItems = PROT.length - R.C.unavail.length;
+  CUR = sel;
   const same = (a, b) => a && b && a.key === b.key && Math.abs(a.total - b.total) < 0.005;
   const tags = r => [same(r, R.rec) && "Recommended", same(r, R.low) && "Lowest price", same(r, R.few) && "Fewest stops", same(r, R.val) && "Best value"].filter(Boolean);
   // list: the picked route first, then the other named routes and up to two nonstops
@@ -574,7 +575,7 @@ function vProtocol() {
   const shipLine = (vid, s) => `<li><span>Shipping${s.est ? ` <span class="t3">(est.)</span>` : ""}</span><b>${s.ship ? money2(s.ship) : "Free"}</b></li>`;
   const nudge = (vid, s) => { const f = V[vid].free_ship_over != null ? +V[vid].free_ship_over : null; return f != null && s.ship && f - s.sub <= 75 ? `<div class="hint data" style="margin-top:6px">Add ${money2(f - s.sub)} more for free shipping</div>` : ""; };
   const lineTxt = a => `${esc(short(a.item.pep))} ${esc(sizeTxt(a.item.size))}${a.offer.swap ? ` <span class="swap-pill">⇄ ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))}</span>` : ""}${a.item.qty > 1 ? ` ×${a.item.qty}` : ""}`;
-  const legs = r => Object.entries(r.stores).map(([vid, s], i) => `<div class="leg"><span class="n">${i + 1}</span><div style="min-width:0"><b>${esc(V[vid].name)}</b> <span class="hint">${repTxt(V[vid])}</span><ul>${r.assign.filter(a => a.offer.v === vid).map(a => `<li><span>${lineTxt(a)}</span><b>${money2(a.offer.price * a.item.qty)}</b></li>`).join("")}${shipLine(vid, s)}</ul>${nudge(vid, s)}</div><div class="rt"><b>${money2(s.sub + s.ship)}</b><a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener" style="font-size:13px">Go to ${esc(V[vid].name)} ↗</a></div></div>`).join("");
+  const legs = r => Object.entries(r.stores).map(([vid, s], i) => `<div class="leg"><span class="n">${i + 1}</span><div style="min-width:0"><b>${esc(V[vid].name)}</b> <span class="hint">${repTxt(V[vid])}</span><ul>${r.assign.filter(a => a.offer.v === vid).map(a => `<li><span>${lineTxt(a)}</span><b>${money2(a.offer.price * a.item.qty)}</b></li>`).join("")}${shipLine(vid, s)}</ul>${nudge(vid, s)}</div><div class="rt"><b>${money2(s.sub + s.ship)}</b>${cartBtn(vid)}<a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener" style="font-size:13px">Go to ${esc(V[vid].name)} ↗</a></div></div>`).join("");
   const swapBox = r => r.swaps.map(a => `<div class="swapbox"><span class="sw-ic">⇄</span><span class="t"><b>${esc(short(a.item.pep))}: ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))} (${money2(a.offer.price)})</b> for ${esc(sizeTxt(a.item.size))} <span class="t3">· ${esc(V[a.offer.v].name)} doesn't sell ${esc(sizeTxt(a.item.size))}. Same compound, same total.</span></span></div>`).join("");
   const sumCard = r => `<div class="card glow sum" style="align-self:start"><div class="r"><span>Items</span><b>${money2(r.sub)}</b></div><div class="r"><span>Shipping</span><b>${money2(r.ship)}${r.est ? " est." : ""}</b></div><div class="r" style="font-size:16px"><span><b style="font-family:inherit">Total</b></span><b>${money2(r.total)}</b></div><div class="r"><span class="t2">Average, same items</span><b class="t2">${money2(r.med)}</b></div><div class="save"><span><span class="lbl">You save vs average</span><div class="hint">before shipping</div></span><b>${money2(Math.max(0, r.save))}</b></div>${r.est ? `<p class="hint">“est.” = this store shows shipping only at checkout; we assume ${money(SHIP_EST)}.</p>` : ""}<div class="ruo">For laboratory research use only</div></div>`;
   const why = r => {
@@ -736,6 +737,73 @@ function swapSheet(p, s) {
 }
 
 /* ---------- carried-over flows: review, owner, install/push ---------- */
+
+/* ---------- boarding: fill a store's cart in a new tab ---------- */
+// Woo stores take /?add-to-cart=ID&quantity=N, one item per page load, so we open one tab and step it
+// through each item, then land on the store's cart. We can't see inside their site, so the shopper confirms.
+let CUR = null, BOARD = null;
+const addUrl = (v, id, q) => `${V[v].url.replace(/\/$/, "")}/?add-to-cart=${encodeURIComponent(id)}&quantity=${q}`;
+function legItems(r, vid) {
+  return r.assign.filter(a => a.offer.v === vid).map(a => {
+    const row = a.offer.row, q = a.offer.n * a.item.qty;
+    return { label: `${short(a.item.pep)} ${sizeTxt(a.item.size)}${a.offer.swap ? ` (${a.offer.n} × ${sizeTxt(row.size)})` : ""}${a.item.qty > 1 ? ` ×${a.item.qty}` : ""}`, qty: q, id: row.cartId, url: row.url || V[vid].url, price: a.offer.price * a.item.qty };
+  });
+}
+function cartBtn(vid) {
+  const m = V[vid].cart_mode || "links", ids = CUR ? legItems(CUR, vid).some(i => i.id) : false;
+  const t = m !== "links" && ids ? "Fill my cart" : "Shop this list";
+  return `<button class="btn p sm" type="button" data-board="${esc(vid)}">${t}</button>`;
+}
+function boardSheet(vid) {
+  const v = V[vid], items = legItems(CUR, vid), mode = items.some(i => i.id) ? (v.cart_mode || "links") : "links";
+  const auto = items.filter(i => i.id), hand = mode === "links" ? items : items.filter(i => !i.id);
+  const sub = items.reduce((a, i) => a + i.price, 0);
+  BOARD = { vid, mode, auto, hand, step: 0, win: null, timer: null, paused: false, done: false, sub };
+  const intro = mode === "fill" ? `We'll open ${esc(v.name)} in a new tab and add ${auto.length} item${auto.length === 1 ? "" : "s"} to your cart.${v.cart_note ? ` <span class="t3">${esc(v.cart_note)}.</span>` : ""}`
+    : mode === "verify_first" ? `${esc(v.name)} asks you to confirm your age or researcher status before anything can go in the cart. Open the store, confirm on their site, then come back here and tap <b>Fill my cart</b>.`
+    : `${esc(v.name)} doesn't let us fill the cart for you yet. Each item opens on their site; add it there and check it off here.`;
+  openSheet(`<div class="shd"><h2>${mode === "links" ? "Shop at" : "Boarding"} ${esc(v.name)}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
+    <p class="t2" style="margin-top:4px">${intro}</p>
+    <div class="board" id="boardBox">${boardBody()}</div>
+    <p class="hint" style="margin-top:12px">You sign in, confirm your age and pay on ${esc(v.name)}'s site. We never see any of it.</p>`, "Fill my cart");
+}
+function boardBody() {
+  const B = BOARD; if (!B) return "";
+  const v = V[B.vid], n = B.auto.length, pct = n ? Math.round(B.step / n * 100) : 100;
+  const line = (i, k) => `<li class="${k < B.step ? "ok" : k === B.step && B.timer ? "now" : ""}"><span>${k < B.step ? I.check : `<span class="dot"></span>`}</span><span>${esc(i.label)}</span><b class="mono">${money2(i.price)}</b>${B.done || B.paused ? `<a class="link" href="${esc(addUrl(B.vid, i.id, i.qty))}" target="${esc("pk_" + B.vid)}" data-boardone style="font-size:12.5px">Add again</a>` : ""}</li>`;
+  const handList = B.hand.length ? `<div class="lbl" style="margin-top:14px">${B.mode === "links" ? "Your items" : "Add these by hand"}</div><ul class="bl">${B.hand.map(i => `<li><label class="ck"><input type="checkbox"><span>${esc(i.label)}</span></label><b class="mono">${money2(i.price)}</b><a class="link" href="${esc(i.url)}" target="_blank" rel="noopener" style="font-size:12.5px">Open ↗</a></li>`).join("")}</ul>` : "";
+  if (B.mode === "links") return `${handList}<div class="row" style="justify-content:space-between;margin-top:14px"><span class="t2">About ${money2(B.sub)} before shipping</span><a class="btn p" href="${esc(v.url)}" target="_blank" rel="noopener">Go to ${esc(v.name)} ${I.ext}</a></div>`;
+  const status = B.done ? `<b class="data">Your cart is ready at ${esc(v.name)}.</b> You should see ${n} item${n === 1 ? "" : "s"}, about ${money2(B.sub)} before shipping. Missing one? Tap <b>Add again</b> next to it.`
+    : B.paused ? `Paused while you were away. Tap <b>Keep going</b> to add the rest.`
+    : B.timer ? `Adding ${esc(B.auto[B.step]?.label || "")}… (${Math.min(B.step + 1, n)} of ${n}). Leave the ${esc(v.name)} tab open.`
+    : B.mode === "verify_first" && !B.opened ? `Step 1: open ${esc(v.name)} and confirm on their site.` : `Ready to add ${n} item${n === 1 ? "" : "s"}.`;
+  const btns = B.done ? `<a class="btn" href="${esc(v.url.replace(/\/$/, ""))}/cart/" target="${esc("pk_" + B.vid)}">Open my cart ${I.ext}</a><button class="btn p" type="button" data-close>Done</button>`
+    : B.paused ? `<button class="btn p" type="button" data-boardgo>Keep going</button>`
+    : B.timer ? "" : B.mode === "verify_first" && !B.opened ? `<button class="btn p" type="button" data-boardopen>Open ${esc(v.name)} ${I.ext}</button>`
+    : `<button class="btn p" type="button" data-boardgo>Fill my cart</button>`;
+  return `<div class="bprog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
+    <p class="bstat" aria-live="polite">${status}</p>
+    ${n ? `<ul class="bl">${B.auto.map(line).join("")}</ul>` : ""}${handList}
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">${btns}</div>`;
+}
+const boardPaint = () => { const el = document.getElementById("boardBox"); if (el) el.innerHTML = boardBody(); };
+function boardGo() {
+  const B = BOARD; if (!B) return;
+  const name = "pk_" + B.vid;
+  // must open the tab inside the tap, or the browser blocks it
+  if (!B.win || B.win.closed) B.win = window.open(B.step < B.auto.length ? addUrl(B.vid, B.auto[B.step].id, B.auto[B.step].qty) : V[B.vid].url, name);
+  else B.win.location = addUrl(B.vid, B.auto[B.step].id, B.auto[B.step].qty);
+  if (!B.win) { toast("Your browser blocked the new tab. Allow pop-ups for PepSeekr and try again."); return; }
+  B.paused = false;
+  const tick = () => {
+    B.step++;
+    if (B.step >= B.auto.length) { B.timer = null; B.done = true; try { B.win.location = V[B.vid].url.replace(/\/$/, "") + "/cart/"; } catch {} boardPaint(); return; }
+    try { B.win.location = addUrl(B.vid, B.auto[B.step].id, B.auto[B.step].qty); } catch {}
+    B.timer = setTimeout(tick, 2600); boardPaint();
+  };
+  B.timer = setTimeout(tick, 2600); boardPaint();
+}
+function boardOpen() { const B = BOARD; if (!B) return; B.win = window.open(V[B.vid].url, "pk_" + B.vid); B.opened = true; boardPaint(); }
 
 /* ---------- write a review (3 steps) ---------- */
 let RW = null;
@@ -1011,7 +1079,7 @@ document.addEventListener("click", async e => {
   const so = t.closest("[data-sortopt]"); if (so) { S.sort = so.dataset.sortopt; saveS(); $$("[data-sortopt]").forEach(x => x.setAttribute("aria-checked", x === so)); refreshGrid(); return; }
   if (t.closest("[data-filters]")) { filterSheet(); return; }
   if (t.closest("[data-stores]")) { storesSheet(); return; }
-  if (t.closest("[data-close]") || t.id === "scrim") { closeSheet(); route(true); return; }
+  if (t.closest("[data-close]") || t.id === "scrim") { if (BOARD?.timer) { clearTimeout(BOARD.timer); BOARD.timer = null; } closeSheet(); route(true); return; }
   const hd = t.closest("[data-hide]"); if (hd) { const id = hd.dataset.hide; HIDE.has(id) ? HIDE.delete(id) : HIDE.add(id); store.set("pf_hidden", [...HIDE]); hd.setAttribute("aria-checked", !HIDE.has(id)); if (!$("#sheet").classList.contains("open")) route(true); return; }
   const sz = t.closest("[data-sz]"); if (sz) { curSize[$("[data-pep]").dataset.pep] = sz.dataset.sz; route(true); return; }
   const fo = t.closest("[data-follow]"); if (fo) { const id = fo.dataset.follow; FOLLOW.has(id) ? FOLLOW.delete(id) : FOLLOW.add(id); store.set("pf_follow", [...FOLLOW]); toast(FOLLOW.has(id) ? `You'll see ${V[id].name}'s sales in Alerts` : `Stopped following ${V[id].name}`); route(true); return; }
@@ -1034,6 +1102,9 @@ document.addEventListener("click", async e => {
   if (t.closest("[data-checklist]")) { checklistSheet(); return; }
   const ck2 = t.closest("[data-chk]"); if (ck2) { const k = ck2.dataset.chk; CHK.has(k) ? CHK.delete(k) : CHK.set(k, 1); const on = CHK.has(k); ck2.setAttribute("aria-pressed", on); ck2.textContent = (on ? "✓ " : "") + sizeTxt(k.split("|")[1]); $("#chkGo").textContent = chkLabel(); return; }
   if (t.closest("[data-chkgo]")) { if (!CHK.size) return; PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); PROT.forEach(i => { WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; }); saveP(); store.set("pf_watch", WATCH); closeSheet(); if (location.hash !== "#list") location.hash = "#list"; else route(); return; }
+  const bd = t.closest("[data-board]"); if (bd) { boardSheet(bd.dataset.board); return; }
+  if (t.closest("[data-boardgo]")) { boardGo(); return; }
+  if (t.closest("[data-boardopen]")) { boardOpen(); return; }
   const st = t.closest("[data-strat]"); if (st) { S.strat = st.dataset.strat; S.open = null; saveS(); route(true); return; }
   if (t.closest("[data-swaps]")) { S.swaps = S.swaps === false; S.open = null; saveS(); route(true); return; }
   const it = t.closest("[data-itin]"); if (it) { const [k, m] = it.dataset.itin.split("|"); const cur = document.querySelector(".itin[aria-expanded=true] [data-itin]"); if (cur === it) return; S.open = k; S.openMode = m; route(true); return; }
