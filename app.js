@@ -84,8 +84,8 @@ const STARWORD = ["", "Bad", "Not great", "Okay", "Good", "Great"];
 
 /* ---------- state ---------- */
 let D = null, V = {}, ROWS = [], ALERTS = [], RV = { stats: {}, recent: [] }, PEPS = [];
-const S = Object.assign({ q: "", cat: "All", sort: "ppu", rep: false, stock: true, coa: false, ship: false, vendor: "", strat: "cheapest", one: false }, store.get("pf_filters", {}), { q: "", cat: "All", vendor: "" });
-const saveS = () => store.set("pf_filters", { sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, strat: S.strat, one: S.one });
+const S = Object.assign({ q: "", cat: "All", sort: "ppu", rep: false, stock: true, coa: false, ship: false, vendor: "", strat: "rec", one: false, swaps: true, open: null }, store.get("pf_filters", {}), { q: "", cat: "All", vendor: "" });
+const saveS = () => store.set("pf_filters", { sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, strat: S.strat, one: S.one, swaps: S.swaps });
 let HIDE = new Set(store.get("pf_hidden", []));
 let WATCH = store.get("pf_watch", null);           // { "pep|size": {target, on, drop, restock, sale} }
 let PROT = store.get("pf_proto2", null);           // [{pep,size,qty}]
@@ -97,7 +97,7 @@ const saveP = () => { store.set("pf_proto2", PROT); syncPush(); };
 function ingest(d) {
   D = d; V = {};
   (d.vendors || []).forEach(v => { v.tier = PRIOR[v.rep_tier] ? v.rep_tier : "unrated"; V[v.id] = v; });
-  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null, coaState: a[17] || null, coaDate: a[18] || null, coaShared: a[19] || 0 }))
+  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null, coaState: a[17] || null, coaDate: a[18] || null, coaShared: a[19] || 0, cartId: a[20] || null }))
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
   ROWS.forEach(r => r.ppu = r.price / r.sv);
   ALERTS = (d.alerts || []).map(a => ({ v: a[0], pep: a[1], size: a[2], kind: a[3], old: a[4] == null ? null : +a[4], now: +a[5], url: a[6], at: a[7], note: a[8] || "" })).filter(a => V[a.v]).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
@@ -496,75 +496,113 @@ function priceStores(assign) { // assign: [{item, offer}]
   const sub = assign.reduce((a, x) => a + x.offer.price * x.item.qty, 0);
   return { stores, sub, ship, est, total: sub + ship };
 }
-function* subsets(arr, k, start = 0, pre = []) { if (pre.length) yield pre; if (pre.length === k) return; for (let i = start; i < arr.length; i++) yield* subsets(arr, k, i + 1, [...pre, arr[i]]); }
-function cartPlan(mode, one) {
-  const items = PROT.map(i => {
-    let offers = live().filter(r => r.pep === i.pep && r.size === i.size && r.stock);
-    if (mode === "value") { const ok = offers.filter(r => V[r.v].rating >= 3); offers = ok.length ? ok : offers; const c = offers.filter(r => r.coa === true); if (c.length) offers = c; }
-    return { ...i, offers: offers.sort((a, b) => a.price - b.price), all: live().filter(r => r.pep === i.pep && r.size === i.size) };
+// ---------- routes: every way to buy the list, priced with shipping ----------
+// A route is a set of stores. "Nonstop" = one checkout, "1 stop" = two checkouts, and so on.
+// Size swaps: if a store doesn't carry the exact vial, the same compound in a size that adds up to the
+// same total (e.g. 2 × 5mg for 10mg) counts, but only at stores without the exact size in stock.
+const unitOf = s => (s || "").replace(/^[\d.]+/, "");
+function itemOffers(it, mode, swaps) {
+  const need = parseFloat(it.size), unit = unitOf(it.size);
+  const rows = live().filter(r => r.pep === it.pep && r.stock && r.unit === unit);
+  const byV = {};
+  rows.filter(r => r.size === it.size).forEach(r => { if (!byV[r.v] || r.price < byV[r.v].price) byV[r.v] = { v: r.v, price: r.price, n: 1, row: r, med: r.med }; });
+  if (swaps) rows.forEach(r => {
+    if (byV[r.v]?.n === 1 || r.size === it.size || !(r.sv > 0)) return;
+    const n = need / r.sv;
+    if (Math.abs(n - Math.round(n)) > 1e-6 || n < 2 || n > 4) return;
+    const o = { v: r.v, price: r.price * n, n: Math.round(n), row: r, med: r.med * n, swap: true };
+    if (!byV[r.v] || o.price < byV[r.v].price) byV[r.v] = o;
   });
-  const buyable = items.filter(x => x.offers.length);
-  const vids = [...new Set(buyable.flatMap(x => x.offers.map(r => r.v)))];
-  let best = null;
-  const tryStores = (set, allowMissing) => {
-    const assign = [], missing = [];
-    for (const it of buyable) { const o = it.offers.find(r => set.includes(r.v)); if (o) assign.push({ item: it, offer: o }); else if (allowMissing) missing.push(it); else return; }
-    if (!assign.length) return;
-    const p = priceStores(assign); p.assign = assign; p.missing = missing;
-    // one store: cover the most items first, then the lowest total
-    const better = !best || (allowMissing ? (missing.length < best.missing.length || (missing.length === best.missing.length && p.total < best.total)) : p.total < best.total);
-    if (better) best = p;
-  };
-  if (one) vids.forEach(v => tryStores([v], true));
-  else {
-    // Exact search over store combinations (up to 5 checkouts). Covers the free-shipping trade-off:
-    // paying a bit more at one store can beat a second shipping charge.
-    for (const set of subsets(vids, Math.min(5, vids.length))) tryStores(set, false);
-    tryStores(vids, false);
+  let offers = Object.values(byV);
+  if (mode === "value") {
+    const ok = offers.filter(o => V[o.v].rating >= 3); if (ok.length) offers = ok;
+    const c = offers.filter(o => o.row.coa === true && o.row.coaState !== "reused"); if (c.length) offers = c;
   }
-  const res = best || { stores: {}, sub: 0, ship: 0, est: false, total: 0, assign: [], missing: [] };
-  items.forEach(x => { const a = res.assign.find(a => a.item.pep === x.pep && a.item.size === x.size); x.pick = a ? a.offer : null; });
-  res.items = items; res.unavail = items.filter(x => !x.offers.length);
-  res.med = res.assign.reduce((a, x) => a + x.offer.med * x.item.qty, 0); res.save = res.med - res.sub;
-  return res;
+  return offers.sort((a, b) => a.price - b.price);
+}
+function* subsets(arr, k, start = 0, pre = []) { if (pre.length) yield pre; if (pre.length === k) return; for (let i = start; i < arr.length; i++) yield* subsets(arr, k, i + 1, [...pre, arr[i]]); }
+function buildRoutes(mode, swaps, maxStores) {
+  const items = PROT.map(i => ({ ...i, offers: itemOffers(i, mode, swaps), all: live().filter(r => r.pep === i.pep && r.size === i.size) }));
+  const buyable = items.filter(x => x.offers.length);
+  const vids = [...new Set(buyable.flatMap(x => x.offers.map(o => o.v)))];
+  const seen = new Map();
+  for (const set of subsets(vids, Math.min(maxStores, vids.length))) {
+    const assign = [], missing = [];
+    for (const it of buyable) { const o = it.offers.find(o => set.includes(o.v)); if (o) assign.push({ item: it, offer: o }); else missing.push(it); }
+    if (!assign.length) continue;
+    if (missing.length && set.length > 1) continue; // only single stores may come up short
+    const used = [...new Set(assign.map(a => a.offer.v))].sort();
+    const key = used.join("+"); if (seen.has(key)) continue;
+    const p = priceStores(assign); Object.assign(p, { key, assign, missing, n: used.length, mode });
+    p.med = assign.reduce((a, x) => a + x.offer.med * x.item.qty, 0); p.save = p.med - p.sub;
+    p.swaps = assign.filter(a => a.offer.swap);
+    seen.set(key, p);
+  }
+  return { items, routes: [...seen.values()], unavail: items.filter(x => !x.offers.length) };
+}
+const stopsTxt = n => n <= 1 ? "Nonstop" : `${n - 1} stop${n > 2 ? "s" : ""}`;
+function routePlan() {
+  const swaps = S.swaps !== false, one = !!S.one, max = one ? 1 : 5;
+  const C = buildRoutes("cheapest", swaps, max), VAL = buildRoutes("value", swaps, max);
+  const full = C.routes.filter(r => !r.missing.length).sort((a, b) => a.total - b.total);
+  const byCover = (a, b) => a.missing.length - b.missing.length || a.total - b.total;
+  const pool = full.length ? full : [...C.routes].sort(byCover);
+  const low = pool[0] || null;
+  const few = [...pool].sort((a, b) => a.n - b.n || byCover(a, b))[0] || null;
+  const tol = low ? Math.max(10, low.total * 0.05) : 0;
+  const rec = low ? [...pool].filter(r => r.total <= low.total + tol).sort((a, b) => a.n - b.n || byCover(a, b))[0] : null;
+  const vfull = VAL.routes.filter(r => !r.missing.length).sort((a, b) => a.total - b.total);
+  const val = (vfull.length ? vfull : [...VAL.routes].sort(byCover))[0] || null;
+  const nonstops = C.routes.filter(r => r.n === 1).sort(byCover);
+  return { C, low, few, rec, val, nonstops, tol, swaps, one };
 }
 function vProtocol() {
-  const one = !!S.one, mode = S.strat === "value" ? "value" : "cheapest";
-  const P = cartPlan(mode, one), split = one ? cartPlan(mode, false) : P, single = one ? P : cartPlan(mode, true), cheap = cartPlan("cheapest", false);
-  const alt = cartPlan(mode === "value" ? "cheapest" : "value", one);
-  const nStores = Object.keys(P.stores).length, oneV = Object.keys(single.stores)[0];
-  const shipLbl = s => s.ship ? `${money2(s.ship)}${s.est ? " est." : ""} shipping` : "free shipping";
-  const nudge = (vid, s) => { const v = V[vid], f = v.free_ship_over != null ? +v.free_ship_over : null; return f != null && s.ship && f - s.sub <= 75 ? `<span class="hint data" style="grid-column:1/-1">Add ${money2(f - s.sub)} more for free shipping</span>` : ""; };
-  const itemRow = x => {
-    const r = x.pick, v = r && V[r.v], ch = cheap.items.find(c => c.pep === x.pep && c.size === x.size)?.pick, lo = x.offers[0];
-    let note = "";
-    if (!r && x.offers.length && one) note = `<div class="note warn">Not carried by ${esc(V[oneV]?.name || "this store")} · cheapest at ${esc(V[lo.v].name)} ${money2(lo.price)}</div>`;
-    else if (r && lo && lo.v !== r.v && lo.price < r.price) note = one ? `<div class="note t3">Lowest is ${money2(lo.price)} at ${esc(V[lo.v].name)}</div>` : `<div class="note t3">${money2(r.price - lo.price)} more than ${esc(V[lo.v].name)}, but saves a shipping charge</div>`;
-    if (r && ch && ch.v !== r.v && mode === "value" && !note) note = `<div class="note warn">Swapped from ${esc(V[ch.v].name)} (${money2(ch.price)} · ★ ${V[ch.v].rating.toFixed(1)})</div>`;
-    const al = r && ALERTS.find(a => a.v === r.v && a.pep === x.pep && a.size === x.size);
-    if (!note && al?.kind === "restock") note = `<div class="note data">Back in stock</div>`;
-    if (!note && al && (al.kind === "drop" || al.kind === "sale") && al.old) note = `<div class="note sale">Price drop · was ${money(al.old)}</div>`;
-    return `<div class="item"><span class="vwell vw">${vial(x.pep, x.size, 58)}</span><div style="min-width:0"><div><a class="nm" href="#p-${slugOf(x.pep)}">${esc(short(x.pep))}</a> <span class="mono t3" style="font-size:12.5px">${esc(sizeTxt(x.size))}</span><span class="qty" aria-label="Quantity"><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|-1" aria-label="One fewer">−</button><span>${x.qty}</span><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|1" aria-label="One more">+</button></span></div>
-      <div class="hint" style="margin-top:3px">${r ? `${esc(v.name)} · ${repTxt(v)} ${coaB(r)}` : x.offers.length ? `<span class="warn">Buy separately</span>` : `<span class="warn">No vendor has this in stock</span>`}</div>${note}
-      <div class="row" style="gap:12px;margin-top:4px"><button class="link" type="button" data-swap="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px">${x.all.length > 1 ? x.all.length + " offers ▾" : "Change size"}</button><button class="link" type="button" data-rm="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px;color:var(--text-3)">Remove</button></div></div>
-      <div class="rt">${r ? `<b>${money2(r.price * x.qty)}</b>${r.price < r.med ? `<span class="mono data" style="font-size:12px">save ${money2((r.med - r.price) * x.qty)}</span>` : `<span class="mono t3" style="font-size:12px">average ${money2(r.med)}</span>`}` : "—"}</div></div>`;
+  const R = routePlan(), tab = ["rec", "low", "few", "value"].includes(S.strat) ? S.strat : "rec";
+  const pick = { rec: R.rec, low: R.low, few: R.few, value: R.val };
+  const sel = (S.open && [R.rec, R.low, R.few, R.val, ...R.nonstops].find(r => r && r.key === S.open && r.mode === (S.openMode || "cheapest"))) || pick[tab];
+  const nItems = PROT.length - R.C.unavail.length;
+  const same = (a, b) => a && b && a.key === b.key && Math.abs(a.total - b.total) < 0.005;
+  const tags = r => [same(r, R.rec) && "Recommended", same(r, R.low) && "Lowest price", same(r, R.few) && "Fewest stops", same(r, R.val) && "Best value"].filter(Boolean);
+  // list: the picked route first, then the other named routes and up to two nonstops
+  const list = []; const add = r => { if (r && !list.some(x => same(x, r))) list.push(r); };
+  add(sel); [R.rec, R.low, R.few, R.val, ...R.nonstops.slice(0, 2)].forEach(add);
+  const shipLine = (vid, s) => `<li><span>Shipping${s.est ? ` <span class="t3">(est.)</span>` : ""}</span><b>${s.ship ? money2(s.ship) : "Free"}</b></li>`;
+  const nudge = (vid, s) => { const f = V[vid].free_ship_over != null ? +V[vid].free_ship_over : null; return f != null && s.ship && f - s.sub <= 75 ? `<div class="hint data" style="margin-top:6px">Add ${money2(f - s.sub)} more for free shipping</div>` : ""; };
+  const lineTxt = a => `${esc(short(a.item.pep))} ${esc(sizeTxt(a.item.size))}${a.offer.swap ? ` <span class="swap-pill">⇄ ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))}</span>` : ""}${a.item.qty > 1 ? ` ×${a.item.qty}` : ""}`;
+  const legs = r => Object.entries(r.stores).map(([vid, s], i) => `<div class="leg"><span class="n">${i + 1}</span><div style="min-width:0"><b>${esc(V[vid].name)}</b> <span class="hint">${repTxt(V[vid])}</span><ul>${r.assign.filter(a => a.offer.v === vid).map(a => `<li><span>${lineTxt(a)}</span><b>${money2(a.offer.price * a.item.qty)}</b></li>`).join("")}${shipLine(vid, s)}</ul>${nudge(vid, s)}</div><div class="rt"><b>${money2(s.sub + s.ship)}</b><a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener" style="font-size:13px">Go to ${esc(V[vid].name)} ↗</a></div></div>`).join("");
+  const swapBox = r => r.swaps.map(a => `<div class="swapbox"><span class="sw-ic">⇄</span><span class="t"><b>${esc(short(a.item.pep))}: ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))} (${money2(a.offer.price)})</b> for ${esc(sizeTxt(a.item.size))} <span class="t3">· ${esc(V[a.offer.v].name)} doesn't sell ${esc(sizeTxt(a.item.size))}. Same compound, same total.</span></span></div>`).join("");
+  const sumCard = r => `<div class="card glow sum" style="align-self:start"><div class="r"><span>Items</span><b>${money2(r.sub)}</b></div><div class="r"><span>Shipping</span><b>${money2(r.ship)}${r.est ? " est." : ""}</b></div><div class="r" style="font-size:16px"><span><b style="font-family:inherit">Total</b></span><b>${money2(r.total)}</b></div><div class="r"><span class="t2">Average, same items</span><b class="t2">${money2(r.med)}</b></div><div class="save"><span><span class="lbl">You save vs average</span><div class="hint">before shipping</div></span><b>${money2(Math.max(0, r.save))}</b></div>${r.est ? `<p class="hint">“est.” = this store shows shipping only at checkout; we assume ${money(SHIP_EST)}.</p>` : ""}<div class="ruo">For laboratory research use only</div></div>`;
+  const why = r => {
+    if (same(r, R.rec) && R.low && !same(r, R.low)) { const d = r.total - R.low.total, k = R.low.n - r.n; return `${money2(d)} over the lowest price, ${k} fewer checkout${k > 1 ? "s" : ""}`; }
+    if (same(r, R.val) && !same(r, R.rec)) return "Vendors rated ★ 3.0+, COA on file where possible";
+    return "";
   };
-  const diff = single.total - split.total;
-  const sum = `<div class="card glow sum"><div class="lbl">${mode === "value" ? "Best value" : "Cheapest"} · ${nStores} store${nStores === 1 ? "" : "s"}${P.missing.length ? ` · ${P.missing.length} item${P.missing.length > 1 ? "s" : ""} elsewhere` : ""}</div>
-    <div class="r"><span>Items</span><b>${money2(P.sub)}</b></div><div class="r"><span>Shipping</span><b>${money2(P.ship)}${P.est ? " est." : ""}</b></div><div class="r" style="font-size:16px"><span><b style="font-family:inherit">Total</b></span><b>${money2(P.total)}</b></div><div class="r"><span class="t2">Market average, same items</span><b class="t2">${money2(P.med)}</b></div>
-    <div class="save"><span><span class="lbl">You save vs average</span><div class="hint">before shipping</div></span><b>${money2(Math.max(0, P.save))}</b></div>
-    <div class="split">${Object.entries(P.stores).map(([vid, s]) => `<div class="s"><b>${esc(V[vid].name)}</b><span class="mono">${money2(s.sub + s.ship)}</span><span class="hint">${s.items.length} item${s.items.length > 1 ? "s" : ""} · ${shipLbl(s)}</span><span></span>${nudge(vid, s)}<a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener">Check out at ${esc(V[vid].name)} ↗</a></div>`).join("")}</div>
-    ${P.est ? `<p class="hint">“est.” = this store shows shipping only at checkout; we assume ${money(SHIP_EST)}.</p>` : ""}
-    <div class="ruo">For laboratory research use only</div></div>`;
-  const oneCk = `<button type="button" class="ck" role="checkbox" aria-checked="${one}" data-one><span class="chk">${I.check}</span>Buy everything from one seller</button>`;
-  const cmp = PROT.length > 1 && oneV ? (one
-    ? `${esc(V[oneV].name)} has ${single.assign.length} of ${PROT.length - P.unavail.length} items. Splitting across stores would be ${diff > 0 ? money2(diff) + " cheaper" : diff < 0 ? money2(-diff) + " more" : "the same"}.`
-    : `Best single store: ${esc(V[oneV].name)}, ${money2(single.total)}${single.missing.length ? ` for ${single.assign.length} of ${PROT.length - P.unavail.length} items` : ""} (${diff > 0 ? money2(diff) + " more" : "same price"}).`) : "";
+  const card = r => {
+    const open = r === sel, base = sel, d = r.total - base.total, nv = Object.keys(r.stores);
+    const t = tags(r);
+    return `<div class="card itin" aria-expanded="${open}">
+      <button type="button" class="itin-hd" data-itin="${esc(r.key)}|${r.mode}" aria-expanded="${open}">
+        <div class="stops">${stopsTxt(r.n)}<small>${r.n} checkout${r.n > 1 ? "s" : ""}</small></div>
+        <div style="min-width:0"><div class="path">${nv.map((v, i) => `${i ? `<span class="hop"></span>` : ""}<span class="node"><span class="av">${esc(V[v].name[0])}</span>${esc(V[v].name.replace(/ Peptides?$/i, ""))}</span>`).join("")}</div>
+          <div class="sub">${t.map((x, i) => `<span class="pill ${i ? "p-brand" : x === "Recommended" ? "p-best" : "p-brand"}">${x}</span>`).join("")}<span>${r.assign.length} of ${nItems} items</span>${r.swaps.length ? `<span class="swap-pill">⇄ ${r.swaps.length} size swap${r.swaps.length > 1 ? "s" : ""}</span>` : ""}${why(r) ? `<span>${why(r)}</span>` : ""}</div></div>
+        <div class="rt"><b>${money2(r.total)}</b>${open ? `<span class="hint">saves ${money2(Math.max(0, r.save))} vs average</span>` : `<span class="mono ${d > 0 ? "t3" : "data"}" style="font-size:13px">${d > 0 ? "+" : d < 0 ? "−" : ""}${money2(Math.abs(d))}</span>`}</div>
+      </button>
+      ${open ? `<div class="expand"><div>${legs(r)}${r.missing.length ? `<div class="note warn" style="margin-top:8px">Not carried here: ${r.missing.map(m => esc(short(m.pep)) + " " + esc(sizeTxt(m.size))).join(", ")}. Buy separately.</div>` : ""}${r.swaps.length ? `<div style="display:grid;gap:8px;margin-top:10px">${swapBox(r)}</div>` : ""}</div>${sumCard(r)}</div>` : ""}
+    </div>`;
+  };
+  const itemRow = x => `<div class="item"><span class="vwell vw">${vial(x.pep, x.size, 58)}</span><div style="min-width:0"><div><a class="nm" href="#p-${slugOf(x.pep)}">${esc(short(x.pep))}</a> <span class="mono t3" style="font-size:12.5px">${esc(sizeTxt(x.size))}</span><span class="qty" aria-label="Quantity"><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|-1" aria-label="One fewer">−</button><span>${x.qty}</span><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|1" aria-label="One more">+</button></span></div>
+      <div class="hint" style="margin-top:3px">${x.offers.length ? `${x.offers.length} store${x.offers.length > 1 ? "s" : ""} in stock · from ${money2(x.offers[0].price)}` : `<span class="warn">No vendor has this in stock</span>`}</div>
+      <div class="row" style="gap:12px;margin-top:4px"><button class="link" type="button" data-swap="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px">${x.all.length > 1 ? x.all.length + " offers ▾" : "Change size"}</button><button class="link" type="button" data-rm="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px;color:var(--text-3)">Remove</button></div></div></div>`;
+  const tabs = [["rec", "Recommended", R.rec], ["low", "Lowest price", R.low], ["few", "Fewest stops", R.few], ["value", "Best value", R.val]];
+  const ctl = `<div class="rtabs" role="radiogroup" aria-label="Route">${tabs.map(([k, t, r]) => `<button class="chip" type="button" role="radio" data-strat="${k}" aria-checked="${tab === k && !S.open}" aria-pressed="${tab === k && !S.open}">${t}${r ? ` <span class="mono">${money2(r.total)}</span>` : ""}</button>`).join("")}</div>
+    <div class="row" style="gap:16px;margin-top:10px"><button type="button" class="ck" role="checkbox" aria-checked="${R.swaps}" data-swaps><span class="chk">${I.check}</span>Allow size swaps</button><button type="button" class="ck" role="checkbox" aria-checked="${R.one}" data-one><span class="chk">${I.check}</span>Buy everything from one seller</button></div>`;
   return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">My list</span></span><h1 class="h1" style="margin-top:12px">Your list, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors, shipping included.` : "Check off what you need. We find the cheapest way to buy it, shipping included, from one store or several."}</p></div></div>
     <div class="imp"><button class="card itile" type="button" data-checklist><span class="hd">${I.list} Check off a list</span><span class="hint">Pick everything you need</span></button><button class="card itile" type="button" data-imp="paste"><span class="hd">${I.paste} Paste a list</span><span class="hint">Type or paste names</span></button><label class="card itile"><span class="hd">${I.file} PDF</span><span class="hint">Drop a file</span><input type="file" id="pdfIn" accept="application/pdf" aria-label="Import a PDF"></label></div>
-    ${PROT.length ? `<div class="row" style="margin-top:16px;justify-content:space-between;gap:12px"><div class="row" style="gap:8px;flex-wrap:nowrap" role="radiogroup" aria-label="Strategy">${[["cheapest", "Cheapest"], ["value", "Best value"]].map(([k, t]) => `<button class="chip" type="button" role="radio" data-strat="${k}" aria-checked="${mode === k}" aria-pressed="${mode === k}">${t} <span class="mono">${money2((k === mode ? P : alt).total)}</span>${(k === mode ? P : alt).missing.length ? ` <span class="t3" style="font-size:12px">${(k === mode ? P : alt).assign.length} of ${PROT.length - P.unavail.length} items</span>` : ""}</button>`).join("")}</div>${oneCk}</div>
-    <p class="hint" style="margin-top:8px">${mode === "value" ? "Skips vendors under ★ 3.0 and prefers listings with a COA on file. " : "Lowest total with shipping, comparing every mix of stores. "}${cmp}</p>
-    <div class="dgrid" style="margin-top:16px"><div style="display:grid;gap:16px;min-width:0"><div class="monly">${sum}</div><div class="card"><div class="phd"><span class="lbl">Items · ${PROT.length}</span><button class="link" type="button" data-checklist>+ Add items</button></div><div class="items">${P.items.map(itemRow).join("")}</div></div></div><aside class="rail donly">${sum}</aside></div>` :
+    ${PROT.length && sel ? `<div style="margin-top:16px">${ctl}</div>
+    <div class="itins" style="margin-top:14px">${list.map(card).join("")}</div>
+    ${R.C.unavail.length ? `<p class="hint warn" style="margin-top:10px">Not in stock anywhere right now: ${R.C.unavail.map(m => esc(short(m.pep)) + " " + esc(sizeTxt(m.size))).join(", ")}. Add it to your watchlist to hear when it's back.</p>` : ""}
+    <div class="card" style="margin-top:16px"><div class="phd"><span class="lbl">Your list · ${PROT.length}</span><button class="link" type="button" data-checklist>+ Add items</button></div><div class="items">${R.C.items.map(itemRow).join("")}</div></div>` :
+    PROT.length ? `<div class="card empty" style="margin-top:16px"><span class="ei">${I.list}</span><b>Nothing on your list is in stock</b><p>Try another size, or add these to your watchlist.</p></div><div class="card" style="margin-top:16px"><div class="items">${R.C.items.map(itemRow).join("")}</div></div>` :
     `<div class="card empty" style="margin-top:16px"><span class="ei">${I.list}</span><b>Your list is empty</b><p>Check off the vials you need, paste a list, or drop a PDF. We read names and vial sizes only.</p><button class="btn p" type="button" data-checklist>Check off a list</button></div>`}
     </div>`;
 }
@@ -987,11 +1025,13 @@ document.addEventListener("click", async e => {
   const ai = t.closest("[data-additem]"); if (ai) { addSheet(ai.dataset.additem); return; }
   const ap = t.closest("[data-addpick]"); if (ap) { const [p, s] = ap.dataset.addpick.split("|"); if (ap.dataset.mode === "watch") { WATCH[p + "|" + s] = { target: null, on: true, drop: true, restock: true, sale: true }; saveW(); toast(`Watching ${short(p)} ${sizeTxt(s)}`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}`); } closeSheet(); route(true); return; }
   const al2 = t.closest("[data-addlist]"); if (al2) { const [p, s] = al2.dataset.addlist.split("|"); if (PROT.some(i => i.pep === p && i.size === s)) { PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)} from your list`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}. See the cheapest cart in Protocol.`); } route(true); return; }
-  if (t.closest("[data-one]")) { S.one = !S.one; saveS(); route(true); return; }
+  if (t.closest("[data-one]")) { S.one = !S.one; S.open = null; saveS(); route(true); return; }
   if (t.closest("[data-checklist]")) { checklistSheet(); return; }
   const ck2 = t.closest("[data-chk]"); if (ck2) { const k = ck2.dataset.chk; CHK.has(k) ? CHK.delete(k) : CHK.set(k, 1); const on = CHK.has(k); ck2.setAttribute("aria-pressed", on); ck2.textContent = (on ? "✓ " : "") + sizeTxt(k.split("|")[1]); $("#chkGo").textContent = chkLabel(); return; }
   if (t.closest("[data-chkgo]")) { if (!CHK.size) return; PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); PROT.forEach(i => { WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; }); saveP(); store.set("pf_watch", WATCH); closeSheet(); if (location.hash !== "#list") location.hash = "#list"; else route(); return; }
-  const st = t.closest("[data-strat]"); if (st) { S.strat = st.dataset.strat; saveS(); route(true); return; }
+  const st = t.closest("[data-strat]"); if (st) { S.strat = st.dataset.strat; S.open = null; saveS(); route(true); return; }
+  if (t.closest("[data-swaps]")) { S.swaps = S.swaps === false; S.open = null; saveS(); route(true); return; }
+  const it = t.closest("[data-itin]"); if (it) { const [k, m] = it.dataset.itin.split("|"); const cur = document.querySelector(".itin[aria-expanded=true] [data-itin]"); if (cur === it) return; S.open = k; S.openMode = m; route(true); return; }
   const q = t.closest("[data-qty]"); if (q) { const [p, s, d] = q.dataset.qty.split("|"); const it = PROT.find(i => i.pep === p && i.size === s); it.qty = Math.max(1, Math.min(20, it.qty + +d)); saveP(); route(true); return; }
   const rm = t.closest("[data-rm]"); if (rm) { const [p, s] = rm.dataset.rm.split("|"); PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)}`); route(true); return; }
   const sw = t.closest("[data-swap]"); if (sw) { const [p, s] = sw.dataset.swap.split("|"); swapSheet(p, s); return; }
