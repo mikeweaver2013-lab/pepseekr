@@ -93,7 +93,7 @@ const saveP = () => { store.set("pf_proto2", PROT); syncPush(); };
 function ingest(d) {
   D = d; V = {};
   (d.vendors || []).forEach(v => { v.tier = PRIOR[v.rep_tier] ? v.rep_tier : "unrated"; V[v.id] = v; });
-  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null }))
+  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null, coaState: a[17] || null, coaDate: a[18] || null, coaShared: a[19] || 0 }))
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
   ROWS.forEach(r => r.ppu = r.price / r.sv);
   ALERTS = (d.alerts || []).map(a => ({ v: a[0], pep: a[1], size: a[2], kind: a[3], old: a[4] == null ? null : +a[4], now: +a[5], url: a[6], at: a[7], note: a[8] || "" })).filter(a => V[a.v]).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
@@ -117,14 +117,19 @@ function score() {
   Object.values(V).forEach(v => {
     const rel = idx[v.id]?.length ? med(idx[v.id]) : 1; v.priceIdx = rel; v.wins = wins[v.id] || 0;
     const mine = ROWS.filter(r => r.v === v.id); v.count = mine.length;
-    const known = mine.filter(r => r.coa === true || r.coa === false); v.coaKnown = known.length > 0; v.coaPct = known.length ? Math.round(known.filter(r => r.coa === true).length / known.length * 100) : 0;
+    const known = mine.filter(r => r.coa === true || r.coa === false); v.coaKnown = known.length > 0;
+    // current report = full credit, outdated = half, reused = none
+    const credit = r => r.coa !== true ? 0 : r.coaState === "reused" ? 0 : r.coaState === "outdated" ? .5 : 1;
+    v.coaPct = known.length ? Math.round(known.reduce((a, r) => a + credit(r), 0) / known.length * 100) : 0;
+    v.coaReused = mine.filter(r => r.coaState === "reused").length;
     // Rating: outside reputation as a prior (weight 8) blended with verified PepSeekr reviews (weight 1 each).
     const tp = +v.rep_trustpilot || 0, prior = tp ? Math.min(tp, PRIOR[v.tier] + .4) : PRIOR[v.tier];
     const st = RV.stats[v.id]; v.rvN = st ? +st.n : 0; v.rvAvg = st ? +st.avg : null;
     v.rating = v.rvN ? (prior * 8 + v.rvAvg * v.rvN) / (8 + v.rvN) : prior;
     const rep = Math.max(0, Math.min(40, (v.rating - 3) / 2 * 40));
     const price = Math.max(0, Math.min(30, 15 + (1 - rel) * 60));
-    const coa = /in-house/i.test(v.coa_note || "") ? 6 : /lot|batch|hplc|mass/i.test(v.coa_note || "") ? 18 : v.coa_note ? 14 : 10;
+    // COA (20): the share of this vendor's product pages where we found a certificate of analysis. Until pages are checked, a capped estimate from their stated policy.
+    const coa = v.coaKnown ? Math.round(20 * v.coaPct / 100) : /in-house/i.test(v.coa_note || "") ? 4 : v.coa_note ? 8 : 6;
     let ship = 5; if (v.free_ship_over != null) ship = v.free_ship_over <= 150 ? 10 : v.free_ship_over <= 250 ? 8 : 6;
     v.pts = { rep: Math.round(rep), price: Math.round(price), coa, ship };
     v.score = Math.round(rep + price + coa + ship);
@@ -136,7 +141,7 @@ const unitTxt = u => u === "iu" ? "IU" : u;
 const shipCost = (v, sub) => v.ship_flat == null ? 0 : (v.free_ship_over != null && sub >= +v.free_ship_over ? 0 : +v.ship_flat);
 const eff = r => r.price + (S.ship ? shipCost(V[r.v], r.price) : 0);
 const live = () => ROWS.filter(r => !HIDE.has(r.v));
-const vis = (rows = live()) => rows.filter(r => (!S.rep || V[r.v].rating >= 4) && (!S.stock || r.stock) && (!S.coa || r.coa === true) && (!S.vendor || r.v === S.vendor));
+const vis = (rows = live()) => rows.filter(r => (!S.rep || V[r.v].rating >= 4) && (!S.stock || r.stock) && (!S.coa || (r.coa === true && r.coaState !== "reused")) && (!S.vendor || r.v === S.vendor));
 const bestOf = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) / c.sv < eff(a) / a.sv ? c : a) : null; };
 const bestPrice = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) < eff(a) ? c : a) : null; };
 const groupBy = rows => { const g = {}; rows.forEach(r => ((g[r.pep] ??= {})[r.size] ??= []).push(r)); return g; };
@@ -159,7 +164,16 @@ function shipText(v) { const b = []; if (v.ship_flat != null) b.push(money(+v.sh
 const poss = n => n + (/s$/i.test(n) ? "'" : "'s");
 const coaPctTxt = v => v.coaKnown ? v.coaPct + "%" : "n/a";
 const avatar = v => `<span class="av" aria-hidden="true">${esc(v.name[0])}</span>`;
-const coaB = (r, full) => r.coa === true ? `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.tested && "tested " + r.tested].filter(Boolean).join(" · "))}">COA ✓${full && r.lot ? " · Lot " + esc(r.lot) : ""}</a>` : r.coa === false ? `<span class="pill p-warn" title="We checked the product page and found no certificate of analysis">No COA</span>` : "";
+const mdy = d => d ? new Date(d + "T12:00").toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "";
+// COA badge: COA ✓ (report on file), Outdated (report > 12 months old), Reused? (same report file at other sellers or for other compounds), No COA.
+// "Verified" is reserved for a batch match against a buyer's vial photo, which isn't collected yet.
+const coaB = (r, full) => {
+  if (r.coa === true && r.coaState === "reused") return `<a class="coa bad" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(r.coaShared > 1 ? "The same report file appears at " + r.coaShared + " sellers." : "The same report file is used for more than one compound.")} Treat as unverified.">⚠ Reused?</a>`;
+  if (r.coa === true && r.coaState === "outdated") return `<a class="coa old" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="Report dated ${esc(r.coaDate || "")}, more than 12 months ago">◷ Outdated${full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
+  if (r.coa === true) return `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.coaDate && "Report " + r.coaDate].filter(Boolean).join(" · "))}">COA ✓${full && r.lot ? " · Lot " + esc(r.lot) : full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
+  if (r.coa === false) return `<span class="pill p-warn" title="We checked the product page and found no certificate of analysis">No COA</span>`;
+  return "";
+};
 const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.promo_detail || "")}">${esc(v.promo_text.length > 34 ? v.promo_text.slice(0, 32) + "…" : v.promo_text)}</span>` : "";
 const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
 const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
@@ -407,7 +421,7 @@ function vVendor(id) {
   const coaRows = rows.filter(r => r.coa === true).sort((a, b) => a.pep.localeCompare(b.pep));
   const following = FOLLOW.has(id), hidden = HIDE.has(id);
   const bk = [["Reviews", v.pts.rep, 40], ["Price", v.pts.price, 30], ["COA", v.pts.coa, 20], ["Shipping", v.pts.ship, 10]];
-  return `<section class="vhero"><div class="gridbg"></div><div class="wrap in"><span class="mono-tile">${esc(v.name[0])}</span><div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}</div>
+  return `<section class="vhero"><div class="gridbg"></div><div class="wrap in"><span class="mono-tile">${esc(v.name[0])}</span><div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>
       <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
       <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.rep_trustpilot ? (+v.rep_trustpilot).toFixed(1) : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Trustpilot"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
     <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
