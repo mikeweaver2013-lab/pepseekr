@@ -681,3 +681,22 @@ dl.pol dt{color:var(--text-3)}
 @keyframes bpulse{50%{box-shadow:0 0 0 7px transparent}}
 @media (prefers-reduced-motion:reduce){.bl li.now .dot{animation:none}.bprog span{transition:none}}
 .leg .rt .btn{margin-top:2px}
+
+/* vendor comparison: fit the column without sideways scrolling */
+.tbl.offers th,.tbl.offers td{padding-left:10px;padding-right:10px}
+.tbl.offers td{white-space:normal}
+.tbl.offers td .px,.tbl.offers td.mono{white-space:nowrap}
+.tbl.offers .coa{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.tbl.offers td.wrap-c{max-width:120px}
+.tbl.offers td:first-child .pill{margin-top:3px}
+@media (min-width:768px){
+  .tbl.offers{table-layout:fixed}
+  .tbl.offers th:nth-child(1){width:25%}.tbl.offers th:nth-child(2){width:15%}.tbl.offers th:nth-child(3){width:9%}
+  .tbl.offers th:nth-child(4){width:14%}.tbl.offers th:nth-child(5){width:14%}.tbl.offers th:nth-child(6){width:12%}.tbl.offers th:nth-child(7){width:11%}
+  .tbl.offers td .px{white-space:normal}
+  .tbl.offers .coa{max-width:100%}
+  .tbl.offers td.mono{white-space:normal}
+  .tbl.offers td:last-child .btn{padding-left:10px;padding-right:10px}
+}
+@media (min-width:768px) and (max-width:1279px){.tbl.offers td:last-child .btn svg{display:none}.tbl.offers th,.tbl.offers td{padding-left:8px;padding-right:8px}.tbl.offers td:first-child{overflow-wrap:anywhere}}
+@media (min-width:768px){.tbl.offers .px s{display:block;margin:0 0 2px}}

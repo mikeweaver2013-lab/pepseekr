@@ -99,6 +99,11 @@ function ingest(d) {
   (d.vendors || []).forEach(v => { v.tier = PRIOR[v.rep_tier] ? v.rep_tier : "unrated"; V[v.id] = v; });
   ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null, coaState: a[17] || null, coaDate: a[18] || null, coaShared: a[19] || 0, cartId: a[20] || null }))
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
+  // One row per store, compound and size: some stores list the same vial under several names. Keep the
+  // in-stock one, then the cheapest, then the one with a lab report.
+  { const best = new Map(); ROWS.forEach(r => { const k = r.v + "|" + r.pep + "|" + r.size, o = best.get(k);
+      if (!o || (r.stock && !o.stock) || (r.stock === o.stock && (r.price < o.price || (r.price === o.price && r.coa === true && o.coa !== true)))) best.set(k, r); });
+    ROWS = [...best.values()]; }
   ROWS.forEach(r => r.ppu = r.price / r.sv);
   ALERTS = (d.alerts || []).map(a => ({ v: a[0], pep: a[1], size: a[2], kind: a[3], old: a[4] == null ? null : +a[4], now: +a[5], url: a[6], at: a[7], note: a[8] || "" })).filter(a => V[a.v]).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   PEPS = [...new Set(ROWS.map(r => r.pep))].sort();
@@ -773,7 +778,7 @@ function boardSheet(vid) {
   const auto = items.filter(i => i.id), hand = mode === "links" ? items : items.filter(i => !i.id);
   const sub = items.reduce((a, i) => a + i.price, 0);
   BOARD = { vid, mode, auto, hand, step: 0, win: null, timer: null, paused: false, done: false, sub };
-  const intro = mode === "fill" ? `We'll open ${esc(v.name)} in a new tab and add ${auto.length} item${auto.length === 1 ? "" : "s"} to your cart.${v.cart_note ? ` <span class="t3">${esc(v.cart_note)}.</span>` : ""}`
+  const intro = mode === "bag_link" ? `We'll open ${esc(v.name)} with all ${auto.length} item${auto.length === 1 ? "" : "s"} already in your bag.` : mode === "fill" ? `We'll open ${esc(v.name)} in a new tab and add ${auto.length} item${auto.length === 1 ? "" : "s"} to your cart.${v.cart_note ? ` <span class="t3">${esc(v.cart_note)}.</span>` : ""}`
     : mode === "verify_first" ? `${esc(v.name)} asks you to confirm your age or researcher status before anything can go in the cart. Open the store, confirm on their site, then come back here and tap <b>Fill my cart</b>.`
     : `${esc(v.name)} doesn't let us fill the cart for you yet. Each item opens on their site; add it there and check it off here.`;
   openSheet(`<div class="shd"><h2>${mode === "links" ? "Shop at" : "Boarding"} ${esc(v.name)}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
@@ -784,14 +789,14 @@ function boardSheet(vid) {
 function boardBody() {
   const B = BOARD; if (!B) return "";
   const v = V[B.vid], n = B.auto.length, pct = n ? Math.round(B.step / n * 100) : 100;
-  const line = (i, k) => `<li class="${k < B.step ? "ok" : k === B.step && B.timer ? "now" : ""}"><span>${k < B.step ? I.check : `<span class="dot"></span>`}</span><span>${esc(i.label)}</span><b class="mono">${money2(i.price)}</b>${B.done || B.paused ? `<a class="link" href="${esc(addUrl(B.vid, i.id, i.qty))}" target="${esc("pk_" + B.vid)}" data-boardone style="font-size:12.5px">Add again</a>` : ""}</li>`;
+  const line = (i, k) => `<li class="${k < B.step ? "ok" : k === B.step && B.timer ? "now" : ""}"><span>${k < B.step ? I.check : `<span class="dot"></span>`}</span><span>${esc(i.label)}</span><b class="mono">${money2(i.price)}</b>${B.done || B.paused ? `<a class="link" href="${esc(B.mode === "bag_link" ? bagUrl(B.vid, [i]) : addUrl(B.vid, i.id, i.qty))}" target="${esc("pk_" + B.vid)}" data-boardone style="font-size:12.5px">Add again</a>` : ""}</li>`;
   const handList = B.hand.length ? `<div class="lbl" style="margin-top:14px">${B.mode === "links" ? "Your items" : "Add these by hand"}</div><ul class="bl">${B.hand.map(i => `<li><label class="ck"><input type="checkbox"><span>${esc(i.label)}</span></label><b class="mono">${money2(i.price)}</b><a class="link" href="${esc(i.url)}" target="_blank" rel="noopener" style="font-size:12.5px">Open ↗</a></li>`).join("")}</ul>` : "";
   if (B.mode === "links") return `${handList}<div class="row" style="justify-content:space-between;margin-top:14px"><span class="t2">About ${money2(B.sub)} before shipping</span><a class="btn p" href="${esc(v.url)}" target="_blank" rel="noopener">Go to ${esc(v.name)} ${I.ext}</a></div>`;
   const status = B.done ? `<b class="data">Your cart is ready at ${esc(v.name)}.</b> You should see ${n} item${n === 1 ? "" : "s"}, about ${money2(B.sub)} before shipping. Missing one? Tap <b>Add again</b> next to it.`
     : B.paused ? `Paused while you were away. Tap <b>Keep going</b> to add the rest.`
     : B.timer ? `Adding ${esc(B.auto[B.step]?.label || "")}… (${Math.min(B.step + 1, n)} of ${n}). Leave the ${esc(v.name)} tab open.`
     : B.mode === "verify_first" && !B.opened ? `Step 1: open ${esc(v.name)} and confirm on their site.` : `Ready to add ${n} item${n === 1 ? "" : "s"}.`;
-  const btns = B.done ? `<a class="btn" href="${esc(v.url.replace(/\/$/, ""))}/cart/" target="${esc("pk_" + B.vid)}">Open my cart ${I.ext}</a><button class="btn p" type="button" data-close>Done</button>`
+  const btns = B.done ? `<a class="btn" href="${esc(v.url.replace(/\/$/, ""))}${B.mode === "bag_link" ? "/cart.html" : "/cart/"}" target="${esc("pk_" + B.vid)}">Open my cart ${I.ext}</a><button class="btn p" type="button" data-close>Done</button>`
     : B.paused ? `<button class="btn p" type="button" data-boardgo>Keep going</button>`
     : B.timer ? "" : B.mode === "verify_first" && !B.opened ? `<button class="btn p" type="button" data-boardopen>Open ${esc(v.name)} ${I.ext}</button>`
     : `<button class="btn p" type="button" data-boardgo>Fill my cart</button>`;
@@ -801,8 +806,11 @@ function boardBody() {
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">${btns}</div>`;
 }
 const boardPaint = () => { const el = document.getElementById("boardBox"); if (el) el.innerHTML = boardBody(); };
+// Stores with their own bag (Patriot) take every item in one link: cart.html?add=KEY:QTY,KEY:QTY
+const bagUrl = (vid, items) => `${V[vid].url.replace(/\/$/, "")}/cart.html?add=${items.map(i => encodeURIComponent(i.id) + ":" + i.qty).join(",")}&utm_source=pepseekr&utm_medium=cart`;
 function boardGo() {
   const B = BOARD; if (!B) return;
+  if (B.mode === "bag_link") { B.win = window.open(bagUrl(B.vid, B.auto), "pk_" + B.vid); if (!B.win) { toast("Your browser blocked the new tab. Allow pop-ups for PepSeekr and try again."); return; } B.step = B.auto.length; B.done = true; boardPaint(); return; }
   const name = "pk_" + B.vid;
   // must open the tab inside the tap, or the browser blocks it
   if (!B.win || B.win.closed) B.win = window.open(B.step < B.auto.length ? addUrl(B.vid, B.auto[B.step].id, B.auto[B.step].qty) : V[B.vid].url, name);
