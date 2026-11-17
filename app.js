@@ -93,7 +93,7 @@ const saveP = () => { store.set("pf_proto2", PROT); syncPush(); };
 function ingest(d) {
   D = d; V = {};
   (d.vendors || []).forEach(v => { v.tier = PRIOR[v.rep_tier] ? v.rep_tier : "unrated"; V[v.id] = v; });
-  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null }))
+  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null }))
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
   ROWS.forEach(r => r.ppu = r.price / r.sv);
   ALERTS = (d.alerts || []).map(a => ({ v: a[0], pep: a[1], size: a[2], kind: a[3], old: a[4] == null ? null : +a[4], now: +a[5], url: a[6], at: a[7], note: a[8] || "" })).filter(a => V[a.v]).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
@@ -159,7 +159,7 @@ function shipText(v) { const b = []; if (v.ship_flat != null) b.push(money(+v.sh
 const poss = n => n + (/s$/i.test(n) ? "'" : "'s");
 const coaPctTxt = v => v.coaKnown ? v.coaPct + "%" : "n/a";
 const avatar = v => `<span class="av" aria-hidden="true">${esc(v.name[0])}</span>`;
-const coaB = r => r.coa === true ? `<span class="coa">COA ✓</span>` : "";
+const coaB = (r, full) => r.coa === true ? `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.tested && "tested " + r.tested].filter(Boolean).join(" · "))}">COA ✓${full && r.lot ? " · Lot " + esc(r.lot) : ""}</a>` : r.coa === false ? `<span class="pill p-warn" title="We checked the product page and found no certificate of analysis">No COA</span>` : "";
 const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.promo_detail || "")}">${esc(v.promo_text.length > 34 ? v.promo_text.slice(0, 32) + "…" : v.promo_text)}</span>` : "";
 const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
 const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
@@ -369,7 +369,7 @@ function offerRow(r, best) {
   const v = V[r.v];
   return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
     <td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.sale ? ` <span class="pill p-sale">Sale</span>` : ""}${S.ship && shipCost(v, r.price) ? `<div class="hint">${money2(eff(r))} shipped</div>` : ""}</td>
-    <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}</td><td class="wrap-c">${esc(shipText(v))}</td>
+    <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r, true) || `<span class="t3" title="Not checked yet">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}</td><td class="wrap-c">${esc(shipText(v))}</td>
     <td style="text-align:right"><a class="btn sm ${best ? "p" : ""}" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${r.stock ? "Buy" : "View"} ${I.ext}</a></td></tr>`;
 }
 function offerCard(r, best) {
@@ -423,7 +423,7 @@ function vVendor(id) {
       <p class="hint" style="margin-top:12px">Every review comes from a buyer who sent a receipt or order confirmation. We check it, then delete it.${v.rep_trustpilot ? ` Elsewhere: ${(+v.rep_trustpilot).toFixed(1)} on Trustpilot${v.rep_reviews ? ` from ${v.rep_reviews}+ reviews` : ""}.` : ""}</p></div>
   </div><aside class="rail">
     <div class="card panel"><div class="bar"><h3>Score breakdown</h3>${ring(v.score, 44)}</div><div class="bk">${bk.map(([t, p, m]) => `<div><div class="r"><span>${t}</span><b>${p} / ${m}</b></div><div class="cbar"><i style="width:${p / m * 100}%"></i></div></div>`).join("")}</div></div>
-    <div class="card panel"><div class="bar"><h3>COA library</h3><span class="mono t3" style="font-size:12px">${coaRows.length} listed</span></div><p class="hint" style="margin-top:4px">Lab reports are hosted on ${esc(poss(v.name))} site.</p><div class="coal" style="margin-top:8px">${coaRows.slice(0, 8).map(r => `<a href="${esc(r.url || v.url)}" target="_blank" rel="noopener"><span><b style="font-weight:600">${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></span><span class="coa">PDF ↗</span></a>`).join("") || `<p class="hint">No lab reports linked on listings yet.</p>`}</div></div>
+    <div class="card panel"><div class="bar"><h3>COA library</h3><span class="mono t3" style="font-size:12px">${coaRows.length} listed</span></div><p class="hint" style="margin-top:4px">Lab reports are hosted on ${esc(poss(v.name))} site.</p><div class="coal" style="margin-top:8px">${coaRows.slice(0, 8).map(r => `<a href="${esc(r.coaUrl || r.url || v.url)}" target="_blank" rel="noopener"><span><b style="font-weight:600">${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></span><span class="coa">${r.lot ? "Lot " + esc(r.lot) : "COA"} ↗</span></a>`).join("") || `<p class="hint">No COAs found on ${esc(poss(v.name))} product pages.</p>`}</div></div>
     <div class="card panel"><h3>Shipping &amp; policies</h3><dl class="pol"><dt>Shipping</dt><dd>${esc(v.shipping_note || shipText(v))}</dd><dt>Lab reports</dt><dd>${esc(v.coa_note || "Not stated")}</dd>${v.specials_note ? `<dt>Deals</dt><dd>${esc(v.specials_note)}</dd>` : ""}${v.rep_note ? `<dt>Notes</dt><dd>${esc(v.rep_note)}</dd>` : ""}</dl>
       <button type="button" class="srow" role="switch" aria-checked="${!hidden}" data-hide="${esc(id)}" style="margin-top:12px;border-top:1px solid var(--border)"><span><b>Follow in my index</b><small>${hidden ? "Hidden from prices, deals and carts" : "Included in prices, deals and carts"}</small></span><span class="tog"><i></i></span></button></div>
   </aside></div></div>`;
@@ -455,7 +455,7 @@ function vCoa() {
   return `<div class="wrap">${sec("", "COA library", "Lab reports, by vial", `${live().filter(r => r.coa === true).length} listings with a COA on file`)}
     <p class="t2" style="max-width:70ch;margin-top:-6px">Listings where the vendor links a certificate of analysis on the product page. Reports live on each vendor's site; check the lot matches what ships.</p>
     <div class="hs row" style="margin:16px 0;flex-wrap:nowrap;overflow-x:auto"><button class="chip" type="button" data-coav="" aria-pressed="${!coaV}">All vendors</button>${vs.map(v => `<button class="chip" type="button" data-coav="${esc(v.id)}" aria-pressed="${coaV === v.id}">${esc(v.name)} <span class="mono t3">${coaPctTxt(v)}</span></button>`).join("")}</div>
-    <div class="card">${rows.length ? `<table class="tbl offers"><thead><tr><th>Peptide</th><th>Size</th><th>Vendor</th><th>Price</th><th>Report</th></tr></thead><tbody>${rows.slice(0, 300).map(r => `<tr><td><a href="#p-${slugOf(r.pep)}"><b>${esc(r.pep)}</b></a></td><td class="mono">${esc(sizeTxt(r.size))}</td><td><a href="#v-${esc(r.v)}">${esc(V[r.v].name)}</a></td><td class="mono">${money2(r.price)}</td><td><a class="coa" href="${esc(r.url || V[r.v].url)}" target="_blank" rel="noopener">View on vendor ↗</a></td></tr>`).join("")}</tbody></table>
+    <div class="card">${rows.length ? `<table class="tbl offers"><thead><tr><th>Peptide</th><th>Size</th><th>Vendor</th><th>Price</th><th>COA</th></tr></thead><tbody>${rows.slice(0, 300).map(r => `<tr><td><a href="#p-${slugOf(r.pep)}"><b>${esc(r.pep)}</b></a></td><td class="mono">${esc(sizeTxt(r.size))}</td><td><a href="#v-${esc(r.v)}">${esc(V[r.v].name)}</a></td><td class="mono">${money2(r.price)}</td><td>${coaB(r, true)}</td></tr>`).join("")}</tbody></table>
       <ul class="ocards monly" style="padding:12px">${rows.slice(0, 120).map(r => `<li class="card ocard"><a class="t" href="${esc(r.url || V[r.v].url)}" target="_blank" rel="noopener"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))} · ${esc(sizeTxt(r.size))}</b><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="coa">PDF ↗</span></a></li>`).join("")}</ul>` : `<div class="empty"><span class="ei">${I.file}</span><b>No lab reports linked for this vendor</b><p>Pick another vendor, or check their site directly.</p></div>`}</div></div>`;
 }
 
