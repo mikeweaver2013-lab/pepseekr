@@ -160,7 +160,7 @@ function vBadge(v) {
   if (v.tier === "mixed") return `<span class="pill p-warn">Mixed</span>`;
   if (v.rank === 1 && v.rating >= 4.4 && (v.rvN || v.rep_trustpilot)) return `<span class="pill p-brand">Top rated</span>`;
   if (v.rating >= 4.2 && (v.rvN || v.rep_trustpilot)) return `<span class="pill p-brand">Well reviewed</span>`;
-  if (!v.rvN && !v.rep_trustpilot) return `<span class="pill p-n">Unrated</span>`;
+  if (!v.rvN && !v.rep_trustpilot) return `<span class="pill p-n" title="No reviews from verified buyers yet">No reviews yet</span>`;
   return "";
 }
 const ringC = s => s >= 60 ? "var(--brand)" : s >= 40 ? "var(--warn)" : "var(--sale)";
