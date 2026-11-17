@@ -1,0 +1,1011 @@
+"use strict";
+/* PepSeekr · Cobalt build */
+const SB = "https://vddteufnmnkqqndzepbk.supabase.co";
+const KEY = "sb_publishable_cj-yQOK0b1fdMqzOHmA4KQ_LhPFKE0t";
+const VAPID = "BFmNh-h076YX0HcJHALM3SqhxunI8P6nZ9EM5eNRG1Br6wXIilGS5QgJWYPZWG_tkTsGsrvpzC-BHAMFGndhAdk";
+const FN = SB + "/functions/v1/vs-reviews";
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const money = n => n == null || !isFinite(n) ? "—" : "$" + (Math.round(n * 100) / 100).toFixed(Math.abs(n % 1) > 0.001 ? 2 : 0);
+const money2 = n => n == null || !isFinite(n) ? "—" : "$" + n.toFixed(2);
+const slugOf = s => s.toLowerCase().replace(/\+/g, "plus").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const ago = iso => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); if (!isFinite(m)) return ""; if (m < 1) return "just now"; if (m < 60) return m + "m ago"; const h = Math.round(m / 60); return h < 48 ? h + "h ago" : Math.round(h / 24) + "d ago"; };
+const agoS = iso => ago(iso).replace(" ago", "");
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+const isM = () => matchMedia("(max-width:767px)").matches;
+async function rpc(fn, args = {}) {
+  const r = await fetch(`${SB}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: KEY, "Content-Type": "application/json" }, body: JSON.stringify(args) });
+  if (!r.ok) { let m = r.status; try { m = (await r.json()).message || m; } catch {} throw new Error(m); }
+  return r.json();
+}
+async function fnPost(body) {
+  const isForm = body instanceof FormData;
+  const r = await fetch(FN, { method: "POST", headers: isForm ? { apikey: KEY } : { apikey: KEY, "Content-Type": "application/json" }, body: isForm ? body : JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "Something went wrong. Try again.");
+  return j;
+}
+
+/* ---------- icons (line, 1.8 stroke) ---------- */
+const ic = (d, sw = 1.8) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const I = {
+  search: ic(`<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>`),
+  bell: ic(`<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>`),
+  star: ic(`<path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/>`),
+  sun: ic(`<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>`),
+  moon: ic(`<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>`),
+  home: ic(`<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>`),
+  dl: ic(`<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>`),
+  cam: ic(`<path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>`),
+  file: ic(`<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h6"/>`),
+  paste: ic(`<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="M9 12h6M9 16h4"/>`),
+  back: ic(`<path d="m15 5-7 7 7 7"/>`, 2),
+  chev: ic(`<path d="m9 5 7 7-7 7"/>`, 2),
+  down: ic(`<path d="m6 9 6 6 6-6"/>`, 2),
+  check: ic(`<path d="m5 12 5 5 9-10"/>`, 2.4),
+  x: ic(`<path d="M6 6l12 12M18 6 6 18"/>`, 2),
+  sliders: ic(`<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>`),
+  ext: ic(`<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v6H4V6h6"/>`),
+  truck: ic(`<path d="M3 6h11v10H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>`),
+  shield: ic(`<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>`),
+  store: ic(`<path d="M4 9 5.5 4h13L20 9"/><path d="M4 9h16v2a3 3 0 0 1-5.3 2 3 3 0 0 1-5.4 0A3 3 0 0 1 4 11z"/><path d="M5 13v8h14v-8"/>`),
+  plus: ic(`<path d="M12 5v14M5 12h14"/>`, 2),
+  minus: ic(`<path d="M5 12h14"/>`, 2),
+  list: ic(`<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>`),
+};
+const STARF = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"/></svg>`;
+function stars(n) { const r = Math.round(n * 2) / 2; let h = ""; for (let i = 1; i <= 5; i++) h += `<span class="${r >= i - .25 ? "" : "e"}">${STARF}</span>`; return `<span class="stars" aria-label="${n.toFixed(1)} out of 5">${h}</span>`; }
+const LOGO = (ink = "var(--logo-ink)") => `<svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="lq${++gid}"><circle cx="43" cy="43" r="21"/></clipPath></defs><circle cx="43" cy="43" r="26" fill="none" style="stroke:${ink}" stroke-width="11"/><line x1="63.5" y1="63.5" x2="83" y2="83" style="stroke:${ink}" stroke-width="12" stroke-linecap="round"/><rect x="16" y="44" width="54" height="26" style="fill:${ink === "#fff" ? "#1F55D8" : "var(--brand)"}" clip-path="url(#lq${gid})"/></svg>`;
+const wordmark = (ink) => `<span class="logo">${LOGO(ink)}<span>Pep<b>Seekr</b></span></span>`;
+
+/* ---------- categories ---------- */
+const CATS = [
+  ["GLP / Metabolic", 1, ["Retatrutide", "Tirzepatide", "Semaglutide", "Cagrilintide", "Survodutide", "Mazdutide", "Retatrutide + Cagrilintide", "5-Amino-1MQ", "SLU-PP-332", "AICAR", "AOD-9604", "Fragment 176-191", "MOTS-c"]],
+  ["Recovery", 2, ["BPC-157", "TB-500", "BPC-157 + TB-500", "GLOW (BPC/TB/GHK)", "KLOW (BPC/TB/GHK/KPV)", "BPC-157 + TB-500 + Cartalax", "KPV", "LL-37", "ARA-290", "Thymosin Alpha-1"]],
+  ["Growth hormone", 3, ["CJC-1295 (no DAC)", "CJC-1295 (DAC)", "CJC-1295 + Ipamorelin", "Ipamorelin", "Tesamorelin", "Tesamorelin + Ipamorelin", "Sermorelin", "GHRP-2", "GHRP-6", "Hexarelin", "IGF-1 LR3", "IGF-1 DES", "MGF", "PEG-MGF", "MK-677", "HGH 191AA"]],
+  ["Longevity / Skin", 4, ["NAD+", "SS-31", "Humanin", "GHK-Cu", "AHK-Cu", "Pal-GHK", "Snap-8", "Matrixyl", "Glutathione", "GHK-Cu + KPV", "Melanotan I", "Melanotan II"]],
+  ["Cognitive / Sleep", 5, ["Selank", "Semax", "Semax + Selank", "DSIP", "Dihexa", "P21", "Adamax", "Cerebrolysin", "PE-22-28", "Pinealon"]],
+  ["Bioregulators", 6, ["Epitalon", "Thymalin", "Thymagen", "Thymogen", "Cartalax", "Cardiogen", "Crystagen", "Testagen", "Prostamax", "Vesugen", "Vesilut", "Pancragen", "Bronchogen", "Ovagen", "Cortagen", "Livagen", "Chonluten"]],
+];
+const ALLCATS = [...CATS.map(c => c[0]), "Blends", "Other"];
+const catOf = p => (CATS.find(c => c[2].includes(p)) || [])[0] || (/ \+ /.test(p) ? "Blends" : "Other");
+const catN = c => (CATS.find(x => x[0] === c) || [])[1] || (c === "Blends" ? 7 : 8);
+const capVar = p => `var(--cat-${catN(catOf(p))})`;
+const short = p => p.replace(/ \(no DAC\)/, " no DAC").replace(/ \(.*\)/, "").replace("BPC-157 + TB-500", "BPC + TB").replace("CJC-1295 + Ipamorelin", "CJC + Ipa").replace("Retatrutide + Cagrilintide", "Reta + Cagri");
+const PRIOR = { strong: 4.5, good: 4.2, mixed: 3.2, unrated: 3.8 };
+const TAGS_POS = ["Fast shipping", "Well packaged", "Matches lab report", "Helpful support", "Would buy again"];
+const TAGS_NEG = ["Slow shipping", "Order problem", "Hard to reach"];
+const STARWORD = ["", "Bad", "Not great", "Okay", "Good", "Great"];
+
+/* ---------- state ---------- */
+let D = null, V = {}, ROWS = [], ALERTS = [], RV = { stats: {}, recent: [] }, PEPS = [];
+const S = Object.assign({ q: "", cat: "All", sort: "ppu", rep: false, stock: true, coa: false, ship: false, vendor: "", strat: "cheapest" }, store.get("pf_filters", {}), { q: "", cat: "All", vendor: "" });
+const saveS = () => store.set("pf_filters", { sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, strat: S.strat });
+let HIDE = new Set(store.get("pf_hidden", []));
+let WATCH = store.get("pf_watch", null);           // { "pep|size": {target, on, drop, restock, sale} }
+let PROT = store.get("pf_proto2", null);           // [{pep,size,qty}]
+let FOLLOW = new Set(store.get("pf_follow", []));  // vendor ids for sale alerts
+const seenAlerts = () => store.get("pf_seen_alerts", 0);
+const saveW = () => { store.set("pf_watch", WATCH); syncPush(); };
+const saveP = () => { store.set("pf_proto2", PROT); syncPush(); };
+
+function ingest(d) {
+  D = d; V = {};
+  (d.vendors || []).forEach(v => { v.tier = PRIOR[v.rep_tier] ? v.rep_tier : "unrated"; V[v.id] = v; });
+  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null }))
+    .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
+  ROWS.forEach(r => r.ppu = r.price / r.sv);
+  ALERTS = (d.alerts || []).map(a => ({ v: a[0], pep: a[1], size: a[2], kind: a[3], old: a[4] == null ? null : +a[4], now: +a[5], url: a[6], at: a[7], note: a[8] || "" })).filter(a => V[a.v]).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  PEPS = [...new Set(ROWS.map(r => r.pep))].sort();
+  score(); migrate();
+}
+function migrate() {
+  if (WATCH && PROT) return;
+  const old = store.get("pf_protocol", store.get("vs_protocol", []));
+  if (!PROT) { PROT = old.map(p => { const b = bestOf(ROWS.filter(r => r.pep === p)); return b ? { pep: p, size: b.size, qty: 1 } : null; }).filter(Boolean); store.set("pf_proto2", PROT); }
+  if (!WATCH) { WATCH = {}; PROT.forEach(i => WATCH[i.pep + "|" + i.size] = { target: null, on: true, drop: true, restock: true, sale: true }); store.set("pf_watch", WATCH); }
+}
+function med(a) { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : NaN; }
+function score() {
+  const g = {}; ROWS.forEach(r => (g[r.pep + "|" + r.size] ??= []).push(r));
+  const idx = {}, wins = {};
+  Object.values(g).forEach(list => {
+    const m = med(list.map(r => r.price)); list.forEach(r => { r.med = m; r.vsMed = r.price / m; (idx[r.v] ??= []).push(r.price / m); });
+    const pool = list.filter(r => r.stock); if (pool.length > 1) { const b = pool.reduce((a, c) => c.price < a.price ? c : a); wins[b.v] = (wins[b.v] || 0) + 1; }
+  });
+  Object.values(V).forEach(v => {
+    const rel = idx[v.id]?.length ? med(idx[v.id]) : 1; v.priceIdx = rel; v.wins = wins[v.id] || 0;
+    const mine = ROWS.filter(r => r.v === v.id); v.count = mine.length;
+    const known = mine.filter(r => r.coa === true || r.coa === false); v.coaKnown = known.length > 0; v.coaPct = known.length ? Math.round(known.filter(r => r.coa === true).length / known.length * 100) : 0;
+    // Rating: outside reputation as a prior (weight 8) blended with verified PepSeekr reviews (weight 1 each).
+    const tp = +v.rep_trustpilot || 0, prior = tp ? Math.min(tp, PRIOR[v.tier] + .4) : PRIOR[v.tier];
+    const st = RV.stats[v.id]; v.rvN = st ? +st.n : 0; v.rvAvg = st ? +st.avg : null;
+    v.rating = v.rvN ? (prior * 8 + v.rvAvg * v.rvN) / (8 + v.rvN) : prior;
+    const rep = Math.max(0, Math.min(40, (v.rating - 3) / 2 * 40));
+    const price = Math.max(0, Math.min(30, 15 + (1 - rel) * 60));
+    const coa = /in-house/i.test(v.coa_note || "") ? 6 : /lot|batch|hplc|mass/i.test(v.coa_note || "") ? 18 : v.coa_note ? 14 : 10;
+    let ship = 5; if (v.free_ship_over != null) ship = v.free_ship_over <= 150 ? 10 : v.free_ship_over <= 250 ? 8 : 6;
+    v.pts = { rep: Math.round(rep), price: Math.round(price), coa, ship };
+    v.score = Math.round(rep + price + coa + ship);
+  });
+  Object.values(V).sort((a, b) => b.score - a.score).forEach((v, i) => v.rank = i + 1);
+}
+const sizeTxt = s => (s || "").replace(/iu$/, " IU");
+const unitTxt = u => u === "iu" ? "IU" : u;
+const shipCost = (v, sub) => v.ship_flat == null ? 0 : (v.free_ship_over != null && sub >= +v.free_ship_over ? 0 : +v.ship_flat);
+const eff = r => r.price + (S.ship ? shipCost(V[r.v], r.price) : 0);
+const live = () => ROWS.filter(r => !HIDE.has(r.v));
+const vis = (rows = live()) => rows.filter(r => (!S.rep || V[r.v].rating >= 4) && (!S.stock || r.stock) && (!S.coa || r.coa === true) && (!S.vendor || r.v === S.vendor));
+const bestOf = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) / c.sv < eff(a) / a.sv ? c : a) : null; };
+const bestPrice = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) < eff(a) ? c : a) : null; };
+const groupBy = rows => { const g = {}; rows.forEach(r => ((g[r.pep] ??= {})[r.size] ??= []).push(r)); return g; };
+const vendors = () => Object.values(V).filter(v => !HIDE.has(v.id)).sort((a, b) => b.score - a.score);
+function vBadge(v) {
+  if (v.tier === "mixed") return `<span class="pill p-warn">Mixed</span>`;
+  if (v.rank === 1 && v.rating >= 4.4 && (v.rvN || v.rep_trustpilot)) return `<span class="pill p-brand">Top rated</span>`;
+  if (v.rating >= 4.2 && (v.rvN || v.rep_trustpilot)) return `<span class="pill p-brand">Well reviewed</span>`;
+  if (!v.rvN && !v.rep_trustpilot) return `<span class="pill p-n">Unrated</span>`;
+  return "";
+}
+const ringC = s => s >= 60 ? "var(--brand)" : s >= 40 ? "var(--warn)" : "var(--sale)";
+function ring(s, size = 54) {
+  const r = (size - 5) / 2, c = 2 * Math.PI * r;
+  return `<span class="ring" style="width:${size}px;height:${size}px;--rc:${ringC(s)}" role="img" aria-label="Score ${s} of 100"><svg viewBox="0 0 ${size} ${size}"><circle class="tr" cx="${size / 2}" cy="${size / 2}" r="${r}"/><circle class="fg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - s / 100)}"/></svg><b style="font-size:${size > 60 ? 20 : size < 46 ? 13 : 15}px">${s}</b></span>`;
+}
+const repTxt = v => v.rvN ? `★ ${v.rvAvg.toFixed(1)} (${v.rvN})` : v.rep_trustpilot ? `★ ${(+v.rep_trustpilot).toFixed(1)} TP` : "No reviews";
+const mktTxt = v => { const d = Math.round((v.priceIdx - 1) * 100); return d === 0 ? "at market" : (d < 0 ? "−" + -d + "%" : "+" + d + "%") + " vs market"; };
+function shipText(v) { const b = []; if (v.ship_flat != null) b.push(money(+v.ship_flat) + " flat"); if (v.free_ship_over != null) b.push("free over " + money(+v.free_ship_over)); return b.join(", ") || "Shown at checkout"; }
+const poss = n => n + (/s$/i.test(n) ? "'" : "'s");
+const coaPctTxt = v => v.coaKnown ? v.coaPct + "%" : "n/a";
+const avatar = v => `<span class="av" aria-hidden="true">${esc(v.name[0])}</span>`;
+const coaB = r => r.coa === true ? `<span class="coa">COA ✓</span>` : "";
+const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.promo_detail || "")}">${esc(v.promo_text.length > 34 ? v.promo_text.slice(0, 32) + "…" : v.promo_text)}</span>` : "";
+const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
+const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
+const inProt = p => PROT.some(i => i.pep === p);
+
+/* ---------- art ---------- */
+let gid = 0;
+function vial(p, size, h = 116) {
+  const id = "g" + (++gid), cap = capVar(p), nm = short(p).toUpperCase(), w = Math.round(h / 2);
+  const fs = nm.length > 10 ? 4.6 : nm.length > 7 ? 5.4 : 6.4;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 60 120" role="img" aria-label="${esc(p)} vial"><defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".35" stop-color="#fff" stop-opacity=".05"/><stop offset=".8" stop-color="#000" stop-opacity=".08"/><stop offset="1" stop-color="#fff" stop-opacity=".35"/></linearGradient></defs>
+<rect x="16" y="4" width="28" height="17" rx="3" style="fill:${cap}"/><rect x="19" y="20" width="22" height="7" fill="#c9ced3"/>
+<path d="M13 36q0-7 7-7h20q7 0 7 7v70q0 10-10 10h-14q-10 0-10-10z" style="fill:var(--vial-glass)"/>
+<path d="M13 90h34v16q0 10-10 10h-14q-10 0-10-10z" style="fill:var(--data)" opacity=".18"/>
+<rect x="13" y="48" width="34" height="34" style="fill:var(--vial-label)"/><rect x="13" y="48" width="34" height="4" style="fill:${cap}"/>
+<text x="30" y="64" font-size="${fs}" font-weight="800" text-anchor="middle" style="fill:var(--vial-ink)" font-family="Instrument Sans,system-ui,sans-serif">${esc(nm.slice(0, 13))}</text>
+<text x="30" y="73" font-size="5.4" text-anchor="middle" style="fill:var(--vial-ink)" opacity=".65" font-family="Instrument Sans,system-ui,sans-serif">${esc(sizeTxt(size))}</text>
+<path d="M13 36q0-7 7-7h20q7 0 7 7v70q0 10-10 10h-14q-10 0-10-10z" fill="url(#${id})"/></svg>`;
+}
+function barcode(seed) {
+  let h = 0; for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  let x = 0, out = ""; while (x < 118) { h = (h * 1103515245 + 12345) >>> 0; const w = 1 + (h >>> 13) % 3; out += `<rect x="${x}" y="0" width="${w}" height="26" style="fill:var(--text)"/>`; x += w + 1 + (h >>> 7) % 2; }
+  return `<svg width="120" height="26" aria-hidden="true">${out}</svg>`;
+}
+
+/* ---------- chrome: band, nav, mobile bars, footer ---------- */
+const newest = () => Object.values(V).map(v => Date.parse(v.last_scraped_at) || 0).reduce((a, b) => Math.max(a, b), 0);
+const pulled = () => newest() ? "pulled " + ago(new Date(newest()).toISOString()) : "loading";
+const curTab = () => { const h = (location.hash || "#home").slice(1); return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
+function unread() { const since = seenAlerts(); return ALERTS.filter(a => Date.parse(a.at) > since && relevant(a)).length; }
+const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || PROT.some(i => ROWS.some(r => r.v === a.v && r.pep === i.pep)) : watchingPep(a.pep) || inProt(a.pep);
+const themeSel = () => document.documentElement.dataset.theme || "system";
+function chrome() {
+  const tab = curTab(), n = unread(), cnt = `<span class="cnt" ${n ? "" : "hidden"}>${n > 9 ? "9+" : n}</span>`;
+  const home = (location.hash || "#home") === "#home" || location.hash === "";
+  $("#band").innerHTML = home ? `<div class="band"><div class="wrap"><a href="#protocol"><span class="new">NEW</span>Shop my protocol: paste a list or drop a PDF and get the cheapest cart →</a><span class="r">${vendors().length} vendors · ${live().length} live listings · ${pulled()}</span></div></div>` : "";
+  const nl = (h, t, k) => `<a href="#${h}" ${tab === k ? 'aria-current="page"' : ""}>${t}</a>`;
+  const res = document.documentElement.dataset.resolved;
+  $("#top").innerHTML = `<div class="wrap in"><a href="#home" aria-label="PepSeekr home">${wordmark()}</a>
+    <nav class="nav" aria-label="Main">${nl("home", "Index", "index")}${nl("vendors", "Vendors", "vendors")}${nl("coa", "COA library", "coa")}${nl("protocol", "Protocol", "protocol")}</nav>
+    <div class="nsearch" role="combobox" aria-expanded="false" aria-haspopup="listbox">${I.search}<input id="nq" type="search" placeholder="Search peptides or vendors" autocomplete="off" aria-label="Search peptides or vendors" value="${esc(S.q)}"><span class="kbd">⌘K</span><div class="sugg" id="sugg" role="listbox"></div></div>
+    <div class="acts"><div class="tt" role="radiogroup" aria-label="Theme"><button type="button" role="radio" aria-checked="${res === "light"}" data-theme-set="light" aria-label="Light">${I.sun}</button><button type="button" role="radio" aria-checked="${res === "dark"}" data-theme-set="dark" aria-label="Dark">${I.moon}</button></div>
+    <a class="btn" href="#watchlist">${I.star} Watchlist <span class="mono t3">${Object.values(WATCH).filter(w => w.on).length}</span></a>
+    <div class="bellwrap"><button class="ib" type="button" id="bell" aria-haspopup="true" aria-expanded="false" aria-label="${n} unread alerts">${I.bell}${cnt}</button><div class="dd" id="dd"></div></div>
+    <button class="btn p" type="button" data-review="">Write a review</button></div></div>`;
+  const h = (location.hash || "#home").slice(1), pushed = h.startsWith("p-") || h.startsWith("v-") || h.startsWith("s-");
+  const ttl = h.startsWith("p-") ? short(PEPS.find(p => slugOf(p) === h.slice(2)) || "") : pushed ? (V[h.slice(2)]?.name || "") : "";
+  $("#mtop").innerHTML = `<div class="in">${pushed ? `<button class="mib back" type="button" data-back aria-label="Back">${I.back}</button><span class="ttl">${esc(ttl)}</span>` : `<a href="#home" aria-label="PepSeekr home">${wordmark()}</a><span class="sp"></span>`}
+    <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a></div>`;
+  const tb = (hh, t, k, icn, extra = "") => `<a href="#${hh}" ${tab === k ? 'aria-current="page"' : ""}><i>${icn}</i>${t}${extra}</a>`;
+  $("#tabbar").innerHTML = tb("home", "Index", "index", I.home) + tb("search", "Search", "search", I.search) + tb("protocol", "Protocol", "protocol", I.dl) + tb("alerts", "Alerts", "alerts", I.bell, cnt) + tb("watchlist", "Watchlist", "watchlist", I.star);
+  $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 6 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything or take a cut from sellers; confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="#vendors">List your store</a> · <a href="#vendors">Suggest a seller</a> · <a href="#seller-log">Seller log</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
+}
+function bellDD() {
+  const list = ALERTS.filter(relevant).slice(0, 4), since = seenAlerts();
+  $("#dd").innerHTML = `<div class="hd"><b>Alerts</b><button class="link" type="button" data-markread>Mark all read</button></div>${list.map(a => alertItem(a, since, true)).join("") || `<div class="empty"><span class="ei">${I.bell}</span><b>No alerts on your watchlist yet</b><p>Tap ☆ on any vial to track its price.</p></div>`}<a class="ft" href="#alerts">View all alerts</a>`;
+}
+
+/* ---------- shared bits ---------- */
+const sec = (n, kick, title, meta = "", see = "") => `<div class="sec"><div><span class="kick"><span class="lbl">${n ? n + " · " : ""}${esc(kick)}</span></span><h2>${title}</h2></div>${meta ? `<div class="meta">${meta}</div>` : ""}${see ? `<a class="see monly" href="${see}">See all</a>` : ""}</div>`;
+const KIND = { sale: ["Sale", "p-sale"], drop: ["Price drop", "p-sale"], restock: ["Restock", "p-brand"], promo: ["Store-wide sale", "p-sale"] };
+const rowFor = (a) => ROWS.find(r => r.v === a.v && r.pep === a.pep && r.size === a.size);
+function delta(a) { if (a.kind === "restock" || !a.old || a.old <= a.now) return a.kind === "restock" ? `<span class="d data">▲ In stock</span>` : ""; return `<span class="d sale">▼ −${Math.round((1 - a.now / a.old) * 100)}%</span>`; }
+function alertCard(a) {
+  const k = KIND[a.kind] || ["Update", "p-n"];
+  return `<a class="card acard" href="#p-${slugOf(a.pep)}"><span class="vwell" style="height:58px">${vial(a.pep, a.size, 52)}</span><span style="min-width:0"><span class="pill ${k[1]}">${k[0]}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="px">${money2(a.now)}${a.old && a.old > a.now ? `<s>${money2(a.old)}</s>` : ""}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span></a>`;
+}
+function ctxTag(a) {
+  const w = WATCH[a.pep + "|" + a.size];
+  if (w?.target && a.now <= w.target) return `<span class="ctx">Below your ${money(w.target)} target</span>`;
+  if (inProt(a.pep)) return `<span class="ctx">On your protocol</span>`;
+  if (watchingPep(a.pep)) return `<span class="ctx">Watching</span>`;
+  if (a.kind === "promo" && FOLLOW.has(a.v)) return `<span class="ctx">Following</span>`;
+  return "";
+}
+function alertItem(a, since, compact) {
+  const k = KIND[a.kind] || ["Update", "p-n"], un = Date.parse(a.at) > since;
+  if (a.kind === "promo") return `<a class="ai ${un ? "unread" : ""}" href="#v-${esc(a.v)}"><span class="ud"></span><span class="vwell vw">${avatar(V[a.v])}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}</span>${ctxTag(a)}</span><div class="nm">${esc(a.note || V[a.v].promo_text || "Store-wide sale")}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span>${compact ? "" : `<span class="rt"></span>`}</a>`;
+  return `<a class="ai ${un ? "unread" : ""}" href="#p-${slugOf(a.pep)}"><span class="ud"></span><span class="vwell vw">${vial(a.pep, a.size, 50)}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}</span>${ctxTag(a)}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span><span class="rt">${a.old && a.old !== a.now ? `<span class="t3">${money2(a.old)}</span> → ` : ""}<b>${money2(a.now)}</b> ${delta(a)}</span></a>`;
+}
+function dealsList(n) {
+  const g = groupBy(vis(live().filter(r => V[r.v].rating >= 3.5))), out = [];
+  Object.entries(g).forEach(([p, sz]) => Object.entries(sz).forEach(([s, l]) => { if (l.length < 3) return; const b = bestPrice(l); if (!b) return; const pct = Math.round((1 - b.price / b.med) * 100); if (pct >= 8) out.push({ p, s, b, pct, n: l.length }); }));
+  out.sort((a, b) => b.pct - a.pct); const seen = new Set(), res = [];
+  for (const d of out) { if (seen.has(d.p)) continue; seen.add(d.p); res.push(d); if (res.length >= n) break; }
+  return res;
+}
+function dealCard(d, glow) {
+  return `<a class="card deal ${glow ? "glow" : ""}" href="#p-${slugOf(d.p)}"><span class="vw">${vial(d.p, d.s, 82)}</span><span class="bd"><span class="row" style="justify-content:space-between"><span class="lbl">vs market median</span>${coaB(d.b)}</span><div style="font-weight:600;margin-top:6px">${esc(short(d.p))} · ${esc(sizeTxt(d.s))}</div><div class="px">${money2(d.b.price)}<s>${money2(d.b.med)}</s></div><div class="ft"><span class="t2">${esc(V[d.b.v].name)}</span><span class="pct">−${d.pct}%</span></div></span></a>`;
+}
+function vendorCard(v, glow) {
+  return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div><span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
+    <div class="trip"><div><span class="lbl">Reviews</span><b>${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : "—"}</b><span class="hint">${v.rvN ? v.rvN + " verified" : v.rep_trustpilot ? "Trustpilot" : "none yet"}</span></div><div><span class="lbl">COA on file</span><b>${coaPctTxt(v)}</b></div><div><span class="lbl">vs market</span>${(d => `<b class="${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</b>`)(Math.round((v.priceIdx - 1) * 100))}</div></div>
+    <div class="cbar" title="COA coverage ${v.coaPct}%"><i style="width:${v.coaPct}%"></i></div>
+    <div class="vfoot"><span>${I.truck.replace("<svg", '<svg style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px"')}${esc(shipText(v))}</span><span class="mono">${v.count} listings</span></div>${v.promo_text ? `<div>${promoPill(v)}</div>` : ""}</a>`;
+}
+function pcard(p, list) {
+  const b = bestOf(list), any = list[0], n = new Set(list.map(r => r.v)).size, sizes = [...new Set(list.map(r => sizeTxt(r.size)))];
+  const sale = list.some(r => r.sale && r.stock), w = watchingPep(p);
+  return `<div class="card pcard"><button class="watch" type="button" data-watch="${esc(p)}" data-size="${esc((b || any).size)}" aria-pressed="${w}" aria-label="${w ? "Stop watching" : "Watch"} ${esc(p)}">${I.star}</button>
+    <a href="#p-${slugOf(p)}"><span class="md">${vial(p, (b || any).size, 100)}</span><span class="fl">${sale ? `<span class="pill p-sale">Sale</span>` : ""}${b ? "" : `<span class="pill p-n">Out of stock</span>`}</span>
+    <span class="bd"><span class="lbl">${esc(catOf(p))}</span><span class="nm">${esc(p)}</span><span class="fr">${b ? `from <b>${money2(eff(b) / b.sv)}</b>/${unitTxt(b.unit)}` : "Out of stock everywhere"}</span><span class="mt"><span>${n} vendor${n > 1 ? "s" : ""}</span><span>${esc(sizes.slice(0, 3).join(" · "))}${sizes.length > 3 ? " +" + (sizes.length - 3) : ""}</span></span></span></a></div>`;
+}
+function catalogGrid(limit) {
+  const q = S.q.trim().toLowerCase();
+  let rows = vis().filter(r => (S.cat === "All" || (S.cat === "Watching" ? watchingPep(r.pep) || inProt(r.pep) : catOf(r.pep) === S.cat)) && (!q || r.pep.toLowerCase().includes(q) || V[r.v].name.toLowerCase().includes(q)));
+  const g = groupBy(rows); let peps = Object.keys(g);
+  const flat = p => Object.values(g[p]).flat();
+  if (S.sort === "ppu") peps.sort((a, b) => { const x = bestOf(flat(a)), y = bestOf(flat(b)); return (x ? x.vsMed : 9) - (y ? y.vsMed : 9) || a.localeCompare(b); });
+  else if (S.sort === "score") peps.sort((a, b) => Math.max(...flat(b).map(r => V[r.v].score)) - Math.max(...flat(a).map(r => V[r.v].score)));
+  else if (S.sort === "rating") peps.sort((a, b) => Math.max(...flat(b).map(r => V[r.v].rating)) - Math.max(...flat(a).map(r => V[r.v].rating)));
+  else peps.sort((a, b) => a.localeCompare(b));
+  return { html: peps.slice(0, limit || 9999).map(p => pcard(p, flat(p))).join("") + (limit && peps.length > limit ? `<a class="btn lg" href="#search" style="grid-column:1/-1">See all ${peps.length} peptides</a>` : "") || `<div class="card empty" style="grid-column:1/-1"><span class="ei">${I.search}</span><b>Nothing matches that</b><p>Check the spelling, or loosen the filters.</p><button class="btn" type="button" data-clearf>Clear filters</button></div>`, n: peps.length, offers: rows.length };
+}
+function catCounts() { const g = groupBy(vis()), c = { All: Object.keys(g).length, Watching: Object.keys(g).filter(p => watchingPep(p) || inProt(p)).length }; ALLCATS.forEach(k => c[k] = Object.keys(g).filter(p => catOf(p) === k).length); return c; }
+function catalog(limit) {
+  const r = catalogGrid(limit), c = catCounts();
+  const sorts = [["ppu", "Lowest $/mg vs median"], ["score", "Vendor score"], ["rating", "Rating"], ["az", "A to Z"]];
+  return `<div class="cat" id="catalog"><div class="card catnav" role="group" aria-label="Category">${["All", "Watching", ...ALLCATS].filter(k => c[k] || k === "All" || k === "Watching").map(k => `<button type="button" data-cat="${esc(k)}" aria-pressed="${S.cat === k}"><span style="font:inherit;color:inherit">${ALLCATS.includes(k) ? `<i style="--h:var(--cat-${catN(k)})"></i>` : ""}${esc(k)}</span><span>${c[k]}</span></button>`).join("")}</div>
+    <div><div class="sortbar"><span class="mono t3" style="font-size:12px" id="catmeta">${r.n} peptides · ${r.offers} offers</span><label class="row" style="gap:8px"><span class="lbl donly">Sort</span><select class="btn sm" id="sortSel" aria-label="Sort">${sorts.map(s => `<option value="${s[0]}" ${S.sort === s[0] ? "selected" : ""}>${s[1]}</option>`).join("")}</select></label></div><div class="pgrid" id="pgrid">${r.html}</div></div></div>`;
+}
+const ck = (k, t) => `<button type="button" class="ck" role="checkbox" aria-checked="${!!S[k]}" data-filt="${k}"><span class="chk">${I.check}</span>${t}</button>`;
+function filtersBar() {
+  return `<div class="card filters"><span class="lbl">Filters</span>${ck("rep", "Good reputation only")}${ck("stock", "In stock only")}${ck("coa", "COA on file")}${ck("ship", "Include shipping")}
+    <div class="r"><select class="btn sm" id="vsel" aria-label="Vendor"><option value="">All vendors</option>${vendors().map(v => `<option value="${esc(v.id)}" ${S.vendor === v.id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select><button class="btn sm" type="button" data-stores>${I.store} Stores</button></div></div>`;
+}
+function ctaBand() {
+  return `<div class="ctab"><div><span class="kick"><span class="lbl">Shop my protocol</span></span><h3 style="margin-top:10px">Paste your protocol. Get the cheapest COA-backed cart.</h3><p>We read the compound names and vial sizes, then price every item across ${vendors().length} vendors.</p></div><div class="row"><a class="btn p lg" href="#protocol" data-imp="paste">${I.paste} Paste a list</a><a class="btn lg" href="#protocol" data-imp="pdf">${I.file} Drop a PDF</a></div></div>`;
+}
+
+/* ---------- home ---------- */
+function vHome() {
+  const vs = vendors(), g = groupBy(live()), deals = dealsList(6), top = deals[0];
+  const recent = ALERTS.filter(a => a.kind !== "promo" && !HIDE.has(a.v) && Date.now() - Date.parse(a.at) < 7 * 864e5);
+  const mine = recent.filter(relevant), sa = [...mine, ...recent.filter(a => !mine.includes(a))].slice(0, 8);
+  const c = catCounts();
+  const spec = top ? `<a class="spec" href="#p-${slugOf(top.p)}"><div class="bar" style="align-items:start"><div><div class="lbl">Specimen · best offer today</div><h3>${esc(short(top.p))}</h3><div class="mono t2">${esc(sizeTxt(top.s))} · lyophilized · 1 vial</div></div><div class="vwell" style="width:86px;height:118px">${vial(top.p, top.s, 112)}</div></div>
+    <div class="g4"><div><div class="lbl">Best price</div><div class="v data">${money2(top.b.price)}</div></div><div><div class="lbl">Market median</div><div class="v s">${money2(top.b.med)}</div></div><div><div class="lbl">Vendor</div><div class="v s">${esc(V[top.b.v].name)}</div></div><div><div class="lbl">Saving</div><div class="v s data">−${top.pct}%</div></div></div>
+    <div class="bar"><div>${barcode(top.p + top.s)}<div class="mono t3" style="font-size:10.5px;margin-top:4px">PSK-${esc(slugOf(short(top.p)).toUpperCase().replace(/-/g, ""))}-${esc(top.s.toUpperCase())} · CHECKED ${new Date(newest() || Date.now()).toLocaleDateString(undefined, { month: "2-digit", day: "2-digit" })}</div></div><div style="text-align:right">${top.b.coa === true ? `<span class="coa" style="font-size:12px;padding:5px 10px">✓ COA ON FILE</span>` : `<span class="pill p-n">COA not listed</span>`}<div class="mono t3" style="font-size:10.5px;margin-top:6px">${new Set(g[top.p][top.s].map(r => r.v)).size} vendors · ${top.n} offers</div></div></div></a>` : "";
+  return `<section class="hero"><div class="gridbg"></div><div class="wrap in"><div>
+      <div class="live"><span class="pill p-brand"><span class="dot"></span> Live price index</span><span class="mono t3" style="font-size:12px">Snapshot · prices ${pulled()}</span></div>
+      <h1 class="display">The peptide price index,<br><span class="grad">with the paperwork.</span></h1>
+      <p class="sub"><span class="donly">Every vial, every vendor, side by side: price per mg, COA on file, verified buyer reviews and shipping. Refreshed automatically.</span><span class="monly">Price per mg, COA on file, verified buyer reviews and shipping for every vendor.</span></p>
+      <label class="msearch monly">${I.search}<input type="search" id="mq" placeholder="Search peptides or vendors" enterkeyhint="search" aria-label="Search peptides or vendors"><button class="mib" type="button" data-filters aria-label="Filters">${I.sliders}</button></label>
+      <div class="stats"><div class="stat"><b>${vs.length}</b><span class="lbl">Vendors</span></div><div class="stat"><b>${Object.keys(g).length}</b><span class="lbl">Peptides</span></div><div class="stat"><b>${live().length}</b><span class="lbl">${isM() ? "Listings" : "Live listings"}</span></div></div>
+      <div class="ctas"><a class="btn p lg" href="#protocol">${I.dl} Import my protocol</a><a class="btn lg" href="#coa">Browse COA library</a></div></div>${spec}</div></section>
+  <div class="wrap">
+    ${filtersBar()}
+    <div class="tiles">${CATS.map(([n, i]) => `<a class="ctile" style="--h:var(--cat-${i})" href="#catalog" data-cat="${esc(n)}"><span class="vw">${vial(CATS[i - 1][2][0], "", 44).replace(/<text[^]*?<\/text>/g, "")}</span><span style="min-width:0"><b>${esc(n)}</b><span>${c[n]} peptides</span></span></a>`).join("")}</div>
+    ${sec("01", "Sale alerts", "Sales, price drops &amp; restocks", `Last 7 days · ${I.bell.replace("<svg", '<svg style="width:13px;height:13px;display:inline;vertical-align:-2px"')} alert me on watched items`, "#alerts")}
+    ${sa.length ? `<div class="g4c hs">${sa.slice(0, isM() ? 8 : 4).map(alertCard).join("")}</div>` : `<div class="card empty"><span class="ei">${I.bell}</span><b>No sales or price drops this week</b><p>We check every 6 hours. Watch a vial to hear about it first.</p></div>`}
+    ${vs.some(v => v.promo_text) ? `<div class="row hs promos" style="margin-top:12px">${vs.filter(v => v.promo_text).map(v => `<a class="chip" href="#v-${esc(v.id)}"><span class="pill p-sale">Store-wide</span>${esc(v.name)}: ${esc(v.promo_text)}</a>`).join("")}</div>` : ""}
+    <div class="monly">${sec("", "Categories", "Browse by category")}<div class="hs mchips"><button class="chip" type="button" data-cat="All" aria-pressed="${S.cat === "All"}">All <span>${c.All}</span></button>${CATS.map(([n, i]) => `<button class="chip" type="button" style="--h:var(--cat-${i})" data-cat="${esc(n)}" aria-pressed="${S.cat === n}">${esc(n)} <span>${c[n]}</span></button>`).join("")}</div></div>
+    ${sec("02", "Best deals", "Best deals vs market median", "Same vial, same size, vendors rated 3.5★ and up", "#search")}
+    ${deals.length ? `<div class="g3c">${deals.slice(0, isM() ? 4 : 6).map((d, i) => dealCard(d, i === 0)).join("")}</div>` : `<div class="card empty"><b>No standout deals right now</b><p>Loosen the filters or check back after the next price pull.</p></div>`}
+    ${sec("03", "Who to buy from", "Who to buy from", "Score = reviews 40 + price 30 + COA 20 + shipping 10", "#vendors")}
+    <div class="g3c">${vs.slice(0, 6).map((v, i) => vendorCard(v, i === 0)).join("")}</div>
+    ${ctaBand()}
+    ${sec("04", "Catalog", "Every peptide we track", "", "")}
+    ${catalog(24)}
+  </div>`;
+}
+function vSearch() {
+  const c = catCounts();
+  return `<div class="wrap"><div class="monly" style="margin-top:14px"><label class="msearch">${I.search}<input type="search" id="mq" placeholder="Search peptides or vendors" enterkeyhint="search" value="${esc(S.q)}" aria-label="Search peptides or vendors"><button class="mib" type="button" data-filters aria-label="Filters">${I.sliders}</button></label>
+    <div class="hs mchips" style="margin-top:12px"><button class="chip" type="button" data-cat="All" aria-pressed="${S.cat === "All"}">All <span>${c.All}</span></button><button class="chip" type="button" data-cat="Watching" aria-pressed="${S.cat === "Watching"}">☆ Watching <span>${c.Watching}</span></button>${ALLCATS.filter(k => c[k]).map(k => `<button class="chip" type="button" style="--h:var(--cat-${catN(k)})" data-cat="${esc(k)}" aria-pressed="${S.cat === k}">${esc(k)} <span>${c[k]}</span></button>`).join("")}</div></div>
+    <div class="donly">${sec("", "Catalog", S.q ? `Results for “${esc(S.q)}”` : "Every peptide we track")}${filtersBar()}<div style="height:20px"></div></div>
+    <div style="height:14px" class="monly"></div>${catalog()}</div>`;
+}
+
+/* ---------- product ---------- */
+let curSize = {};
+function vProduct(slug) {
+  const p = PEPS.find(x => slugOf(x) === slug);
+  if (!p) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><span class="ei">${I.search}</span><b>No vendor lists this right now</b><p>It may be out of stock everywhere. Check back after the next price pull.</p><a class="btn" href="#search">Browse the catalog</a></div></div>`;
+  const all = live().filter(r => r.pep === p), g = groupBy(all)[p] || {};
+  const sizes = Object.keys(g).sort((a, b) => g[a][0].sv - g[b][0].sv);
+  const overall = bestOf(all) || all[0];
+  const size = curSize[p] && g[curSize[p]] ? curSize[p] : overall.size;
+  const raw = g[size], list = vis(raw).sort((a, b) => (b.stock - a.stock) || eff(a) - eff(b));
+  const b = bestPrice(list) || bestPrice(raw) || raw[0], nV = new Set(all.map(r => r.v)).size;
+  const pct = Math.round((1 - b.price / b.med) * 100), w = WATCH[p + "|" + size] || {};
+  const rv = RV.recent.filter(r => r.pep === p), avg = rv.length ? rv.reduce((a, r) => a + r.stars, 0) / rv.length : 0;
+  const multi = list.filter(r => r.stock).length > 1;
+  return `<div class="wrap" data-pep="${esc(p)}" data-size="${esc(size)}">
+    <div class="crumbs"><a href="#home">Index</a> / <a href="#catalog" data-cat="${esc(catOf(p))}">${esc(catOf(p))}</a> / ${esc(p)}</div>
+    <div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
+      <div class="card glow phead"><span class="vwell vw">${vial(p, size, 130)}</span><div style="min-width:0"><span class="lbl">${esc(catOf(p))}</span><h1>${esc(p)}</h1><div class="ln mono" style="font-size:13px">${nV} vendors · ${all.length} offers${b ? ` · best $/${unitTxt(b.unit)} at ${esc(V[b.v].name)}` : ""}${rv.length ? ` · ★ ${avg.toFixed(1)} (${rv.length})` : ""}</div>
+        <div class="sizes donly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${g[s].length} offers · ${lb ? "from " + money2(lb.price) : "out of stock"}</small></button>`; }).join("")}</div></div>
+        <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price</span><b>${money2(b.price)}</b><span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs median" : "at median"}</span><div style="margin-top:12px"><button class="btn ${w.on ? "" : "p"}" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch for sales"}</button></div></div></div>
+      <div class="sizes monly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${g[s].length} offers · ${lb ? "from " + money(lb.price) : "out"}</small></button>`; }).join("")}</div>
+      ${b.v && V[b.v].promo_text ? `<div class="promo"><b>${esc(V[b.v].name)}: ${esc(V[b.v].promo_text)}</b><div class="hint" style="margin-top:2px">${esc((V[b.v].promo_detail || "").replace(/\.?$/, ". ").replace(/^\. $/, ""))}Prices shown are before this discount.</div></div>` : ""}
+      <div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>
+        ${list.length ? `<table class="tbl offers"><thead><tr><th>Vendor</th><th>Price</th><th>$/${unitTxt(b.unit)}</th><th>COA</th><th>Rating</th><th>Shipping</th><th></th></tr></thead><tbody>${list.map(r => offerRow(r, multi && r === b)).join("")}</tbody></table>
+        <ul class="ocards monly" style="padding:12px">${list.map(r => offerCard(r, multi && r === b)).join("")}</ul>` : `<div class="empty"><b>No offers match your filters</b><p>Turn off “In stock only” or “COA on file” to see every vendor.</p><button class="btn" type="button" data-clearf>Clear filters</button></div>`}</div>
+      <div class="card panel"><div class="bar"><div><span class="lbl">Price history · 90 days</span><h3 style="margin-top:4px">Lowest ${esc(sizeTxt(size))} offer</h3></div><span class="mono t3" id="chsum" style="font-size:12px"></span></div><div class="chart" id="chart" style="margin-top:12px"><div class="hint">Loading…</div></div></div>
+    </div>
+    <aside class="rail">
+      <div class="card panel notify"><h3>Notify me when ${esc(sizeTxt(size))} drops below</h3><div class="row"><label class="pin">$<input id="tgt" inputmode="decimal" value="${w.target ?? ""}" placeholder="${(b.price * .9).toFixed(2)}" aria-label="Target price"></label><button class="btn p" type="button" data-settarget>Set alert</button></div>
+        <div class="row" style="gap:16px">${["drop", "restock", "sale"].map(k => `<button type="button" class="ck" role="checkbox" aria-checked="${w[k] !== false}" data-wk="${k}"><span class="chk">${I.check}</span>${{ drop: "Price drop", restock: "Restock", sale: "Sale" }[k]}</button>`).join("")}</div>${pushCard(true)}</div>
+      <div class="card panel"><div class="bar"><h3>Verified buyer reviews</h3><button class="link" type="button" data-review="${esc(b.v)}">Write one</button></div>
+        ${rv.length ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${avg.toFixed(1)}</b><div>${stars(avg)}<div class="hint">${rv.length} verified review${rv.length > 1 ? "s" : ""}</div></div></div>${hist(rv)}${rv.slice(0, 4).map(r => reviewItem(r, true)).join("")}` : `<div class="empty" style="padding:18px 0 4px"><span class="ei">${I.shield}</span><b>No reviews for ${esc(short(p))} yet</b><p>Reviews come only from buyers who show a receipt.</p></div>`}</div>
+    </aside></div></div>`;
+}
+function hist(rv) { const d = [5, 4, 3, 2, 1].map(s => rv.filter(r => r.stars === s).length), t = rv.length || 1; return `<div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(d[i] / t * 100)}%"></b></i><span>${d[i]}</span></div>`).join("")}</div>`; }
+function offerRow(r, best) {
+  const v = V[r.v];
+  return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
+    <td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.sale ? ` <span class="pill p-sale">Sale</span>` : ""}${S.ship && shipCost(v, r.price) ? `<div class="hint">${money2(eff(r))} shipped</div>` : ""}</td>
+    <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}</td><td class="wrap-c">${esc(shipText(v))}</td>
+    <td style="text-align:right"><a class="btn sm ${best ? "p" : ""}" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${r.stock ? "Buy" : "View"} ${I.ext}</a></td></tr>`;
+}
+function offerCard(r, best) {
+  const v = V[r.v];
+  return `<li class="card ocard ${best ? "glow" : ""}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}</span></span></a>
+    <div class="bt"><span>${I.truck.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}${esc(shipText(v))}</span><span class="row" style="gap:8px">${r.sale && r.reg ? `<s class="mono">${money2(r.reg)}</s>` : ""}${coaB(r)}<span class="mono">${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : ""}</span></span></div></li>`;
+}
+const HCACHE = {};
+async function drawChart(p, size) {
+  const el = $("#chart"); if (!el) return;
+  try {
+    HCACHE[p] ??= await rpc("pf_history", { p_peptide: p });
+    const cut = Date.now() - 90 * 864e5;
+    const h = HCACHE[p].filter(x => x[0] === size && Date.parse(x[1]) >= cut).map(x => ({ d: x[1], v: +x[2] }));
+    if (!$("#chart")) return;
+    if (h.length < 2) { el.innerHTML = `<p class="hint">We started tracking this size ${h[0] ? "on " + new Date(h[0].d + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " at " + money2(h[0].v) : "today"}. The chart fills in as prices change.</p>`; return; }
+    const W = 640, H = 180, pad = 10, lo = Math.min(...h.map(x => x.v)), hi = Math.max(...h.map(x => x.v)), span = hi - lo || 1;
+    const pts = h.map((x, i) => [pad + i * (W - 2 * pad) / (h.length - 1), pad + 6 + (1 - (x.v - lo) / span) * (H - 2 * pad - 20)]);
+    const line = pts.map(q => q.map(n => n.toFixed(1)).join(",")).join(" "), last = pts[pts.length - 1], id = "ch" + (++gid);
+    const ch = h[h.length - 1].v - h[0].v, sumTxt = `Lowest ${sizeTxt(size)} offer ${ch < 0 ? "down " + money2(-ch) : ch > 0 ? "up " + money2(ch) : "unchanged"} over ${h.length} days`;
+    $("#chsum").textContent = (ch < 0 ? "▼ " : ch > 0 ? "▲ " : "") + (ch ? money2(Math.abs(ch)) : "flat");
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(sumTxt)}"><defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--brand);stop-opacity:.28"/><stop offset="1" style="stop-color:var(--brand);stop-opacity:0"/></linearGradient></defs><polygon points="${pts[0][0]},${H} ${line} ${last[0]},${H}" fill="url(#${id})"/><polyline points="${line}" fill="none" style="stroke:var(--data)" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg><div class="ax"><span>${new Date(h[0].d + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span><span>Low ${money2(lo)} · High ${money2(hi)}</span><span>Today ${money2(h[h.length - 1].v)}</span></div><p class="sr">${esc(sumTxt)}</p>`;
+  } catch { el.innerHTML = `<p class="hint">Price history needs a connection.</p>`; }
+}
+
+/* ---------- vendor ---------- */
+let vrf = "recent";
+function vVendor(id) {
+  const v = V[id]; if (!v) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>This vendor isn't listed right now</b><a class="btn" href="#vendors">All vendors</a></div></div>`;
+  const rows = ROWS.filter(r => r.v === id), g = groupBy(rows);
+  const listings = Object.entries(g).map(([p, sz]) => Object.values(sz).map(l => l[0])).flat().sort((a, b) => a.vsMed - b.vsMed);
+  let rv = RV.recent.filter(r => r.v === id);
+  const st = RV.stats[id], dist = st?.dist || [0, 0, 0, 0, 0], tot = dist.reduce((a, b) => a + b, 0) || 1;
+  if (vrf === "5") rv = rv.filter(r => r.stars === 5); if (vrf === "ship") rv = rv.filter(r => (r.tags || []).some(t => /ship/i.test(t))); if (vrf === "coa") rv = rv.filter(r => (r.tags || []).includes("Matches lab report"));
+  const coaRows = rows.filter(r => r.coa === true).sort((a, b) => a.pep.localeCompare(b.pep));
+  const following = FOLLOW.has(id), hidden = HIDE.has(id);
+  const bk = [["Reviews", v.pts.rep, 40], ["Price", v.pts.price, 30], ["COA", v.pts.coa, 20], ["Shipping", v.pts.ship, 10]];
+  return `<section class="vhero"><div class="gridbg"></div><div class="wrap in"><span class="mono-tile">${esc(v.name[0])}</span><div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}</div>
+      <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
+      <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.rep_trustpilot ? (+v.rep_trustpilot).toFixed(1) : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Trustpilot"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
+    <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
+  <div class="wrap"><div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
+    ${v.promo_text ? `<div class="promo" style="margin:0"><b>${esc(v.promo_text)}</b><div class="hint" style="margin-top:2px">${esc(v.promo_detail || "")}${v.promo_ends ? " Ends " + new Date(v.promo_ends).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + "." : ""} Prices on PepSeekr are before this discount.</div></div>` : ""}
+    <div class="card"><div class="phd"><div><span class="lbl">Listings</span><h3 style="font-size:17px;margin-top:4px">Best prices at ${esc(v.name)}</h3></div><span class="mono t3" style="font-size:12px">sorted by vs median</span></div>
+      <table class="tbl offers"><thead><tr><th>Peptide</th><th>Price</th><th>$/mg</th><th>vs median</th><th>COA</th><th></th></tr></thead><tbody>${listings.slice(0, 40).map(r => { const d = Math.round((r.vsMed - 1) * 100); return `<tr class="${r.stock ? "" : "oos"}"><td><a href="#p-${slugOf(r.pep)}"><b>${esc(r.pep)}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></a></td><td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}</td><td class="mono">${money2(r.ppu)}</td><td class="mono ${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td><button class="watch" style="position:static" type="button" data-watch="${esc(r.pep)}" data-size="${esc(r.size)}" aria-pressed="${isW(r.pep, r.size)}" aria-label="Watch ${esc(r.pep)} ${esc(r.size)}">${I.star}</button></td></tr>`; }).join("")}</tbody></table>
+      <ul class="ocards monly" style="padding:12px">${listings.slice(0, 20).map(r => `<li class="card ocard"><a class="t" href="#p-${slugOf(r.pep)}"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))}</b><span class="hint" style="display:block">${esc(sizeTxt(r.size))}</span></span><span class="px"><b>${money2(r.price)}</b><span class="${r.vsMed < 1 ? "data" : ""}">${r.vsMed < 1 ? "−" + Math.round((1 - r.vsMed) * 100) + "% vs median" : money2(r.ppu) + "/mg"}</span></span></a></li>`).join("")}</ul></div>
+    <div class="card panel"><div class="bar"><h3>Verified buyer reviews</h3><button class="btn sm p" type="button" data-review="${esc(id)}">Review ${esc(v.name)}</button></div>
+      <div class="row" style="margin:12px 0 4px;gap:8px">${[["recent", "Most recent"], ["5", "5★"], ["ship", "Shipping"], ["coa", "COA match"]].map(([k, t]) => `<button class="chip" type="button" data-vrf="${k}" aria-pressed="${vrf === k}">${t}</button>`).join("")}</div>
+      ${v.rvN ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${v.rvAvg.toFixed(1)}</b><div>${stars(v.rvAvg)}<div class="hint">${v.rvN} verified</div></div></div><div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(dist[i] / tot * 100)}%"></b></i><span>${dist[i]}</span></div>`).join("")}</div>` : ""}
+      ${rv.map(r => reviewItem(r)).join("") || `<div class="empty"><span class="ei">${I.shield}</span><b>${v.rvN ? "No reviews match that filter" : "No verified reviews yet"}</b><p>Bought from ${esc(v.name)}? A photo of your receipt keeps every review real.</p></div>`}
+      <p class="hint" style="margin-top:12px">Every review comes from a buyer who sent a receipt or order confirmation. We check it, then delete it.${v.rep_trustpilot ? ` Elsewhere: ${(+v.rep_trustpilot).toFixed(1)} on Trustpilot${v.rep_reviews ? ` from ${v.rep_reviews}+ reviews` : ""}.` : ""}</p></div>
+  </div><aside class="rail">
+    <div class="card panel"><div class="bar"><h3>Score breakdown</h3>${ring(v.score, 44)}</div><div class="bk">${bk.map(([t, p, m]) => `<div><div class="r"><span>${t}</span><b>${p} / ${m}</b></div><div class="cbar"><i style="width:${p / m * 100}%"></i></div></div>`).join("")}</div></div>
+    <div class="card panel"><div class="bar"><h3>COA library</h3><span class="mono t3" style="font-size:12px">${coaRows.length} listed</span></div><p class="hint" style="margin-top:4px">Lab reports are hosted on ${esc(poss(v.name))} site.</p><div class="coal" style="margin-top:8px">${coaRows.slice(0, 8).map(r => `<a href="${esc(r.url || v.url)}" target="_blank" rel="noopener"><span><b style="font-weight:600">${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></span><span class="coa">PDF ↗</span></a>`).join("") || `<p class="hint">No lab reports linked on listings yet.</p>`}</div></div>
+    <div class="card panel"><h3>Shipping &amp; policies</h3><dl class="pol"><dt>Shipping</dt><dd>${esc(v.shipping_note || shipText(v))}</dd><dt>Lab reports</dt><dd>${esc(v.coa_note || "Not stated")}</dd>${v.specials_note ? `<dt>Deals</dt><dd>${esc(v.specials_note)}</dd>` : ""}${v.rep_note ? `<dt>Notes</dt><dd>${esc(v.rep_note)}</dd>` : ""}</dl>
+      <button type="button" class="srow" role="switch" aria-checked="${!hidden}" data-hide="${esc(id)}" style="margin-top:12px;border-top:1px solid var(--border)"><span><b>Follow in my index</b><small>${hidden ? "Hidden from prices, deals and carts" : "Included in prices, deals and carts"}</small></span><span class="tog"><i></i></span></button></div>
+  </aside></div></div>`;
+}
+
+/* ---------- vendors list, seller log ---------- */
+function vVendors() {
+  const vs = Object.values(V).sort((a, b) => b.score - a.score);
+  return `<div class="wrap">${sec("", "Vendors", "Who to buy from", "Score = reviews 40 + price 30 + COA 20 + shipping 10")}
+    <p class="t2" style="max-width:70ch;margin-top:-6px">Reviews come from buyers who showed a receipt, blended with each vendor's outside reputation. Price compares every vial to the median for the same size. Vendors are listed for free; none pay for placement or ranking.</p>
+    <div class="g3c" style="margin-top:20px">${vs.map((v, i) => vendorCard(v, i === 0)).join("")}</div>
+    <div class="g3c" style="margin-top:36px;grid-template-columns:1fr 1fr">
+      <div class="card panel"><span class="kick"><span class="lbl">Suggest a seller</span></span><h3 style="margin-top:10px">Know a vendor we should check?</h3><p class="hint" style="margin-top:4px">We vet every store the same way: a readable catalog, lab reports on product pages, real contact details, and no dosing or health claims.</p>
+        <form id="suggest" class="notify" style="margin-top:12px"><input class="field" name="url" placeholder="Store web address" required inputmode="url" autocomplete="off" aria-label="Store web address"><input class="field" name="name" placeholder="Store name (optional)" aria-label="Store name"><div class="seg" role="radiogroup" aria-label="I'm a"><button type="button" role="radio" aria-checked="true" data-kind="buyer">I bought from them</button><button type="button" role="radio" aria-checked="false" data-kind="seller">I run this store</button></div><input class="field" name="email" type="email" placeholder="Email (optional, for the result)" aria-label="Email" autocomplete="email"><button class="btn p" type="submit">Send it in</button></form></div>
+      <div class="card panel"><span class="kick"><span class="lbl">Seller log</span></span><h3 style="margin-top:10px">Every listing change, in public</h3><div id="slog" class="coal" style="margin-top:10px"><p class="hint">Loading…</p></div></div></div>
+    ${sec("", "Owner tools", "Review queue &amp; stores")}<div id="owner">${ownerKey() ? `<p class="hint">Loading…</p>` : `<div class="box" style="max-width:460px"><p class="hint">For the site owner. Enter your key to check reviews and manage stores.</p><input class="field" id="adminKey" type="password" autocomplete="off" placeholder="Owner key" aria-label="Owner key"><button class="btn p" id="adminGo" type="button">Unlock</button></div>`}</div></div>`;
+}
+async function loadLog() {
+  const el = $("#slog"); if (!el) return;
+  try { const l = await rpc("vs_seller_log"); el.innerHTML = (l || []).slice(0, 12).map(x => `<div class="srow" style="min-height:44px"><span><b style="font-weight:600">${esc(x.name || x.vendor_name || x.domain || "")}</b><small>${esc(x.note || x.reason || x.action || "")}</small></span><span class="mono t3" style="font-size:12px">${x.at ? ago(x.at) : ""}</span></div>`).join("") || `<p class="hint">No changes yet.</p>`; }
+  catch { el.innerHTML = `<p class="hint">The log needs a connection.</p>`; }
+}
+
+/* ---------- COA library ---------- */
+let coaV = "";
+function vCoa() {
+  const rows = live().filter(r => r.coa === true && (!coaV || r.v === coaV)).sort((a, b) => a.pep.localeCompare(b.pep) || a.sv - b.sv);
+  const vs = vendors();
+  return `<div class="wrap">${sec("", "COA library", "Lab reports, by vial", `${live().filter(r => r.coa === true).length} listings with a COA on file`)}
+    <p class="t2" style="max-width:70ch;margin-top:-6px">Listings where the vendor links a certificate of analysis on the product page. Reports live on each vendor's site; check the lot matches what ships.</p>
+    <div class="hs row" style="margin:16px 0;flex-wrap:nowrap;overflow-x:auto"><button class="chip" type="button" data-coav="" aria-pressed="${!coaV}">All vendors</button>${vs.map(v => `<button class="chip" type="button" data-coav="${esc(v.id)}" aria-pressed="${coaV === v.id}">${esc(v.name)} <span class="mono t3">${coaPctTxt(v)}</span></button>`).join("")}</div>
+    <div class="card">${rows.length ? `<table class="tbl offers"><thead><tr><th>Peptide</th><th>Size</th><th>Vendor</th><th>Price</th><th>Report</th></tr></thead><tbody>${rows.slice(0, 300).map(r => `<tr><td><a href="#p-${slugOf(r.pep)}"><b>${esc(r.pep)}</b></a></td><td class="mono">${esc(sizeTxt(r.size))}</td><td><a href="#v-${esc(r.v)}">${esc(V[r.v].name)}</a></td><td class="mono">${money2(r.price)}</td><td><a class="coa" href="${esc(r.url || V[r.v].url)}" target="_blank" rel="noopener">View on vendor ↗</a></td></tr>`).join("")}</tbody></table>
+      <ul class="ocards monly" style="padding:12px">${rows.slice(0, 120).map(r => `<li class="card ocard"><a class="t" href="${esc(r.url || V[r.v].url)}" target="_blank" rel="noopener"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))} · ${esc(sizeTxt(r.size))}</b><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="coa">PDF ↗</span></a></li>`).join("")}</ul>` : `<div class="empty"><span class="ei">${I.file}</span><b>No lab reports linked for this vendor</b><p>Pick another vendor, or check their site directly.</p></div>`}</div></div>`;
+}
+
+/* ---------- shop my protocol ---------- */
+function cartPlan(strat) {
+  const items = PROT.map(i => {
+    let offers = live().filter(r => r.pep === i.pep && r.size === i.size && r.stock);
+    if (strat === "value") { const ok = offers.filter(r => V[r.v].rating >= 3); offers = ok.length ? ok : offers; const c = offers.filter(r => r.coa === true); if (c.length) offers = c; }
+    return { ...i, offers: offers.sort((a, b) => a.price - b.price), all: live().filter(r => r.pep === i.pep && r.size === i.size) };
+  });
+  if (strat === "fewest") {
+    const left = items.filter(x => x.offers.length), pick = new Map();
+    while (left.some(x => !pick.has(x))) {
+      const cand = {}; left.filter(x => !pick.has(x)).forEach(x => new Set(x.offers.map(r => r.v)).forEach(v => (cand[v] ??= []).push(x)));
+      const [best] = Object.entries(cand).sort((a, b) => b[1].length - a[1].length || a[1].reduce((s, x) => s + x.offers.find(r => r.v === a[0]).price, 0) - b[1].reduce((s, x) => s + x.offers.find(r => r.v === b[0]).price, 0));
+      if (!best) break; best[1].forEach(x => pick.set(x, x.offers.find(r => r.v === best[0])));
+    }
+    items.forEach(x => x.pick = pick.get(x) || null);
+  } else items.forEach(x => x.pick = x.offers[0] || null);
+  const stores = {}; items.forEach(x => { if (x.pick) { (stores[x.pick.v] ??= { sub: 0, items: [] }).sub += x.pick.price * x.qty; stores[x.pick.v].items.push(x); } });
+  let ship = 0; Object.entries(stores).forEach(([v, s]) => { s.ship = shipCost(V[v], s.sub); ship += s.ship; });
+  const sub = items.reduce((a, x) => a + (x.pick ? x.pick.price * x.qty : 0), 0), medT = items.reduce((a, x) => a + (x.pick ? x.pick.med * x.qty : 0), 0);
+  return { items, stores, sub, ship, total: sub + ship, med: medT, save: medT - sub };
+}
+function vProtocol() {
+  const plans = { cheapest: cartPlan("cheapest"), value: cartPlan("value"), fewest: cartPlan("fewest") }, P = plans[S.strat] || plans.cheapest, cheap = plans.cheapest;
+  const nStores = Object.keys(P.stores).length;
+  const itemRow = x => {
+    const r = x.pick, v = r && V[r.v], ch = cheap.items.find(c => c.pep === x.pep && c.size === x.size)?.pick;
+    let note = "";
+    if (r && ch && ch.v !== r.v) note = `<div class="note warn">Swapped from ${esc(V[ch.v].name)} (${money2(ch.price)} · ★ ${V[ch.v].rating.toFixed(1)}) · +${money2(r.price - ch.price)}</div>`;
+    const al = r && ALERTS.find(a => a.v === r.v && a.pep === x.pep && a.size === x.size);
+    if (!note && al?.kind === "restock") note = `<div class="note data">Back in stock</div>`;
+    if (!note && al && (al.kind === "drop" || al.kind === "sale") && al.old) note = `<div class="note sale">Price drop · was ${money(al.old)}</div>`;
+    return `<div class="item"><span class="vwell vw">${vial(x.pep, x.size, 58)}</span><div style="min-width:0"><div><a class="nm" href="#p-${slugOf(x.pep)}">${esc(short(x.pep))}</a> <span class="mono t3" style="font-size:12.5px">${esc(sizeTxt(x.size))}</span><span class="qty" aria-label="Quantity"><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|-1" aria-label="One fewer">−</button><span>${x.qty}</span><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|1" aria-label="One more">+</button></span></div>
+      <div class="hint" style="margin-top:3px">${r ? `${esc(v.name)} · ${repTxt(v)} · In stock ${coaB(r)}` : `<span class="warn">No vendor has this in stock</span>`}</div>${note}
+      <div class="row" style="gap:12px;margin-top:4px"><button class="link" type="button" data-swap="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px">${x.all.length - 1 > 0 ? x.all.length - 1 + " other offers ▾" : "Change size"}</button><button class="link" type="button" data-rm="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px;color:var(--text-3)">Remove</button></div></div>
+      <div class="rt">${r ? `<b>${money2(r.price * x.qty)}</b>${r.price < r.med ? `<span class="mono data" style="font-size:12px">save ${money2((r.med - r.price) * x.qty)}</span>` : `<span class="mono t3" style="font-size:12px">median ${money2(r.med)}</span>`}` : "—"}</div></div>`;
+  };
+  const sum = `<div class="card glow sum"><div class="lbl">${{ cheapest: "Cheapest", value: "Best value", fewest: "Fewest stores" }[S.strat]} · ${nStores} store${nStores === 1 ? "" : "s"}</div>
+    <div class="r"><span>Subtotal</span><b>${money2(P.sub)}</b></div><div class="r"><span>Known shipping</span><b>${money2(P.ship)}</b></div><div class="r"><span class="t2">Market median, same cart</span><b class="t2">${money2(P.med)}</b></div>
+    <div class="save"><span><span class="lbl">You save vs median</span><div class="hint">Total ${money2(P.total)}</div></span><b>${money2(Math.max(0, P.save))}</b></div>
+    <div class="split">${Object.entries(P.stores).map(([vid, s]) => `<div class="s"><b>${esc(V[vid].name)}</b><span class="mono">${money2(s.sub + s.ship)}</span><span class="hint">${s.items.length} item${s.items.length > 1 ? "s" : ""}${s.ship ? ` · ${money2(s.ship)} shipping` : " · free shipping"}</span><span></span><a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener">Check out at ${esc(V[vid].name)} ↗</a></div>`).join("")}</div>
+    <div class="row" style="justify-content:space-between"><span class="hint">${I.star.replace("<svg", '<svg style="width:14px;height:14px;display:inline;vertical-align:-2px"')} Watching all items</span></div><div class="ruo">For laboratory research use only</div></div>`;
+  return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">Shop my protocol</span></span><h1 class="h1" style="margin-top:12px">Your protocol, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors.` : "Add the vials you buy. We price every one across every vendor and build the cheapest cart."}</p></div></div>
+    <div class="imp"><button class="card itile" type="button" data-imp="paste"><span class="hd">${I.paste} Paste a list</span><span class="hint">Type or paste names</span></button><label class="card itile"><span class="hd">${I.file} PDF</span><span class="hint">Drop a file</span><input type="file" id="pdfIn" accept="application/pdf" aria-label="Import a PDF"></label><button class="card itile" type="button" data-additem><span class="hd">${I.plus} Add item</span><span class="hint">Search the catalog</span></button></div>
+    ${PROT.length ? `<div class="hs row" style="margin-top:16px;flex-wrap:nowrap" role="radiogroup" aria-label="Strategy">${[["cheapest", "Cheapest"], ["value", "Best value"], ["fewest", "Fewest stores"]].map(([k, t]) => `<button class="chip" type="button" role="radio" data-strat="${k}" aria-checked="${S.strat === k}" aria-pressed="${S.strat === k}">${t} <span class="mono">${money2(plans[k].total)}</span></button>`).join("")}</div>
+    <p class="hint" style="margin-top:8px">${{ cheapest: "Lowest in-stock price for each item.", value: "Skips vendors under ★ 3.0 and prefers listings with a COA on file.", fewest: "Fewest checkouts, cheapest within those stores." }[S.strat]}</p>
+    <div class="dgrid" style="margin-top:16px"><div style="display:grid;gap:16px;min-width:0"><div class="monly">${sum}</div><div class="card"><div class="phd"><span class="lbl">Items · ${PROT.length}</span><button class="link" type="button" data-additem>+ Add item</button></div><div class="items">${P.items.map(itemRow).join("")}</div></div></div><aside class="rail donly">${sum}</aside></div>` :
+    `<div class="card empty" style="margin-top:16px"><span class="ei">${I.list}</span><b>Your protocol is empty</b><p>Paste a list of compounds, drop a PDF, or add vials one at a time. We read names and vial sizes only.</p><button class="btn p" type="button" data-imp="paste">Paste a list</button></div>`}
+    </div>`;
+}
+function parseList(txt) {
+  const names = PEPS.map(p => ({ p, keys: [p, short(p), p.replace(/[-\s]/g, "")].map(k => k.toLowerCase()) })).sort((a, b) => b.p.length - a.p.length);
+  const found = [], lines = txt.split(/\n|,|;/);
+  lines.forEach(line => {
+    const l = line.toLowerCase(), lc = l.replace(/[-\s]/g, "");
+    const hit = names.find(n => n.keys.some(k => l.includes(k) || lc.includes(k.replace(/[-\s]/g, "")))); if (!hit) return;
+    const m = l.match(/(\d+(?:\.\d+)?)\s*(mg|mcg|iu)\b/);
+    const sizes = [...new Set(ROWS.filter(r => r.pep === hit.p).map(r => r.size))];
+    let size = m && sizes.find(s => s.toLowerCase() === (m[1] + m[2]).toLowerCase());
+    if (!size) { const b = bestOf(ROWS.filter(r => r.pep === hit.p)); size = b ? b.size : sizes[0]; }
+    if (size && !found.some(f => f.pep === hit.p && f.size === size)) found.push({ pep: hit.p, size, qty: 1 });
+  });
+  return found;
+}
+function addItems(list) {
+  let n = 0; list.forEach(i => { if (!PROT.some(x => x.pep === i.pep && x.size === i.size)) { PROT.push(i); n++; } const k = i.pep + "|" + i.size; WATCH[k] ??= { target: null, on: true, drop: true, restock: true, sale: true }; });
+  saveP(); store.set("pf_watch", WATCH); return n;
+}
+async function importPdf(file) {
+  toast("Reading the compounds…");
+  try {
+    const lib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs");
+    lib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+    const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise; let txt = "";
+    for (let i = 1; i <= Math.min(doc.numPages, 20); i++) { const c = await (await doc.getPage(i)).getTextContent(); let y = null; c.items.forEach(it => { if (y !== null && Math.abs(it.transform[5] - y) > 2) txt += "\n"; txt += it.str + " "; y = it.transform[5]; }); txt += "\n"; }
+    const f = parseList(txt); const n = addItems(f);
+    toast(f.length ? `Added ${n} item${n === 1 ? "" : "s"} from the PDF` : "We couldn't find any compounds we track in that PDF", 4500); route(true);
+  } catch { toast("Couldn't read that PDF. Try pasting the list instead.", 4500); }
+}
+
+/* ---------- alerts & watchlist ---------- */
+let afilt = "all", aseg = "alerts", openedAt = 0;
+function vAlerts(seg) {
+  aseg = seg || aseg; const since = openedAt;
+  const kinds = { all: () => true, drop: a => a.kind === "drop", restock: a => a.kind === "restock", sale: a => a.kind === "sale" || a.kind === "promo" };
+  const list = ALERTS.filter(a => !HIDE.has(a.v)).filter(kinds[afilt]);
+  const mine = list.filter(relevant), feed = mine.length ? mine : list;
+  const today = feed.filter(a => Date.now() - Date.parse(a.at) < 864e5), earlier = feed.filter(a => Date.now() - Date.parse(a.at) >= 864e5).slice(0, 60);
+  const nw = Object.values(WATCH).filter(w => w.on).length, un = feed.filter(a => Date.parse(a.at) > since).length;
+  const segc = `<div class="seg" role="radiogroup" aria-label="View" style="margin-top:14px"><button type="button" role="radio" data-aseg="alerts" aria-checked="${aseg === "alerts"}">Alerts<small>${un} new</small></button><button type="button" role="radio" data-aseg="watchlist" aria-checked="${aseg === "watchlist"}">Watchlist<small>${nw}</small></button></div>`;
+  const wk = list.filter(a => Date.now() - Date.parse(a.at) < 7 * 864e5);
+  const rail = `<aside class="rail"><div class="card panel"><span class="lbl">This week</span><div class="g3c" style="grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">${[["Drops", wk.filter(a => a.kind === "drop").length], ["Sales", wk.filter(a => a.kind === "sale" || a.kind === "promo").length], ["Restocks", wk.filter(a => a.kind === "restock").length]].map(([t, n]) => `<div><b class="mono" style="font-size:22px">${n}</b><div class="lbl">${t}</div></div>`).join("")}</div></div>
+    <div class="card panel"><h3>Notify me about</h3>${[["drop", "Price drops", "5% or more on a watched vial"], ["restock", "Restocks", "A watched vial is back"], ["sale", "Sales", "Item and store-wide sales"]].map(([k, t, s]) => `<button type="button" class="srow" role="switch" aria-checked="${store.get("pf_n_" + k, true)}" data-npref="${k}"><span><b style="font-weight:600">${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`).join("")}
+      <div class="lbl" style="margin:14px 0 8px">Deliver by</div>${pushCard(false)}</div>
+    <div class="card panel monly"><h3>Appearance</h3><div class="seg" role="radiogroup" aria-label="Theme" style="margin-top:10px">${[["system", "System"], ["light", "Light"], ["dark", "Dark"]].map(([k, t]) => `<button type="button" role="radio" data-theme-set="${k}" aria-checked="${themeSel() === k}">${t}</button>`).join("")}</div></div></aside>`;
+  const body = aseg === "watchlist" ? watchlist() : `<div class="hs row" style="flex-wrap:nowrap;gap:8px">${[["all", "All · " + list.length], ["drop", "Price drops"], ["restock", "Restocks"], ["sale", "Sales"]].map(([k, t]) => `<button class="chip" type="button" data-afilt="${k}" aria-pressed="${afilt === k}">${t}</button>`).join("")}</div>
+    ${!mine.length && list.length ? `<p class="hint" style="margin-top:10px">Nothing on your watchlist changed, so here's everything. Tap ☆ on a vial to narrow this down.</p>` : ""}
+    <div class="card feed" style="margin-top:12px">${today.length ? `<div class="gh"><span class="lbl">Today</span></div>${today.map(a => alertItem(a, since)).join("")}` : ""}${earlier.length ? `<div class="gh"><span class="lbl">Earlier this week</span></div>${earlier.map(a => alertItem(a, since)).join("")}` : ""}${!today.length && !earlier.length ? `<div class="empty"><span class="ei">${I.bell}</span><b>No ${afilt === "all" ? "" : { drop: "price-drop ", restock: "restock ", sale: "sale " }[afilt]}alerts this week</b><p>We check prices every 6 hours.</p></div>` : ""}</div>`;
+  return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><h1 class="h1">${aseg === "watchlist" ? "Watchlist" : "Alerts"}</h1></div>${aseg === "alerts" ? `<button class="link" type="button" data-markread style="min-height:44px">Mark all read</button>` : `<button class="link" type="button" data-additem="watch" style="min-height:44px">+ Watch a peptide</button>`}</div>${segc}
+    <div class="dgrid"><div style="min-width:0">${body}</div>${rail}</div></div>`;
+}
+function watchlist() {
+  const ks = Object.keys(WATCH);
+  if (!ks.length) return `<div class="card empty"><span class="ei">${I.star}</span><b>Nothing on your watchlist yet</b><p>Tap ☆ on any vial to track its price.</p><a class="btn" href="#search">Browse the catalog</a></div>`;
+  return `<div class="card wl"><div class="wr donly" style="padding-top:10px;padding-bottom:10px"><span class="lbl">Peptide</span><span class="lbl">Best now</span><span class="lbl tgc">Your target</span><span class="lbl spk">30 days</span><span></span></div>${ks.map(k => {
+    const [p, s] = k.split("|"), w = WATCH[k], b = bestPrice(live().filter(r => r.pep === p && r.size === s)), hit = w.target && b && b.price <= w.target;
+    return `<div class="wr"><a href="#p-${slugOf(p)}" class="row" style="gap:10px;flex-wrap:nowrap;min-width:0"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(p, s, 42)}</span><span style="min-width:0"><b style="font-weight:600">${esc(short(p))}</b> <span class="mono t3">${esc(sizeTxt(s))}</span><span class="hint" style="display:block">${b ? esc(V[b.v].name) : "Out of stock"}</span></span></a>
+      <span class="mono"><b>${b ? money2(b.price) : "—"}</b>${hit ? ` <span class="pill p-brand">Hit</span>` : ""}</span>
+      <label class="tg tgc">$<input value="${w.target ?? ""}" placeholder="target" inputmode="decimal" data-tgt="${esc(k)}" aria-label="Target price for ${esc(p)} ${esc(s)}"></label>
+      <span class="spk" data-spark="${esc(k)}"></span>
+      <button type="button" role="switch" aria-checked="${w.on}" data-won="${esc(k)}" aria-label="Alerts for ${esc(p)} ${esc(s)}" style="min-height:44px;display:grid;place-items:center"><span class="tog"><i></i></span></button></div>`; }).join("")}</div>`;
+}
+async function sparks() {
+  for (const el of $$("[data-spark]")) {
+    const [p, s] = el.dataset.spark.split("|");
+    try { HCACHE[p] ??= await rpc("pf_history", { p_peptide: p }); } catch { continue; }
+    const cut = Date.now() - 30 * 864e5, h = HCACHE[p].filter(x => x[0] === s && Date.parse(x[1]) >= cut).map(x => +x[2]);
+    if (h.length < 2) { el.innerHTML = `<span class="hint">new</span>`; continue; }
+    const lo = Math.min(...h), hi = Math.max(...h), sp = hi - lo || 1;
+    el.innerHTML = `<svg width="84" height="24" viewBox="0 0 84 24" role="img" aria-label="30-day trend"><polyline points="${h.map((v, i) => `${(i * 82 / (h.length - 1) + 1).toFixed(1)},${(22 - (v - lo) / sp * 20).toFixed(1)}`).join(" ")}" fill="none" style="stroke:var(--data)" stroke-width="1.8"/></svg>`;
+  }
+}
+
+/* ---------- sheets ---------- */
+function filterSheet() {
+  const c = catCounts(), n = vis().length;
+  const sw = (k, t, s) => `<button type="button" class="srow" role="switch" aria-checked="${!!S[k]}" data-filt="${k}"><span><b style="font-weight:600">${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`;
+  openSheet(`<div class="shd"><h2>Filters</h2><div class="row" style="gap:4px"><button class="link" type="button" data-clearf style="min-height:44px;padding:0 8px">Reset</button><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div></div>
+    <div class="ssec"><span class="lbl">Quality</span>${sw("rep", "Good reputation only", "Vendors rated 4★ and up")}${sw("stock", "In stock only", "Hide sold-out listings")}${sw("coa", "COA on file", "Lab report linked on the listing")}${sw("ship", "Include shipping", "Add known flat shipping to prices")}</div>
+    <div class="ssec"><span class="lbl">Category</span><div class="wrapchips">${["All", ...ALLCATS].filter(k => k === "All" || c[k]).map(k => `<button class="chip" type="button" data-cat="${esc(k)}" aria-pressed="${S.cat === k}">${esc(k)}</button>`).join("")}</div></div>
+    <div class="ssec"><span class="lbl">Sort by</span><div class="seg" role="radiogroup" aria-label="Sort">${[["ppu", "$/mg"], ["score", "Score"], ["rating", "Rating"]].map(([k, t]) => `<button type="button" role="radio" data-sortopt="${k}" aria-checked="${S.sort === k}">${t}</button>`).join("")}</div></div>
+    <div class="ssec"><span class="lbl">Vendors</span><button type="button" class="srow" data-stores><span><b style="font-weight:600">Stores</b><small>${HIDE.size ? HIDE.size + " hidden" : "Following all " + Object.keys(V).length}</small></span>${I.chev.replace("<svg", '<svg style="width:18px;height:18px"')}</button></div>
+    <div class="sfoot"><button class="btn" type="button" data-clearf>Clear</button><button class="btn p" type="button" data-close>Show ${n} offers</button></div>`, "Filters");
+}
+function storesSheet() {
+  openSheet(`<div class="shd"><h2>Stores</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div><p class="hint">Hidden stores are left out of the index, deals and protocol carts.</p>
+    <div class="ssec">${Object.values(V).sort((a, b) => b.score - a.score).map(v => `<button type="button" class="srow" role="switch" aria-checked="${!HIDE.has(v.id)}" data-hide="${esc(v.id)}"><span class="row" style="gap:12px;flex-wrap:nowrap">${ring(v.score, 40)}<span><b style="font-weight:600">${esc(v.name)}</b><small>${esc(shipText(v))} · ${v.count} listings</small></span></span><span class="tog m"><i></i></span></button>`).join("")}</div>
+    <div class="sfoot"><button class="btn p" type="button" data-close>Done</button></div>`, "Stores");
+}
+function pasteSheet() {
+  openSheet(`<div class="shd"><h2>Paste your list</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div><p class="hint">One compound per line, with the vial size if you know it. We read names and sizes only.</p>
+    <textarea class="field" id="pasteTxt" style="height:180px;margin-top:12px" placeholder="BPC-157 10mg&#10;TB-500 5mg&#10;Retatrutide 20mg"></textarea><p class="hint" id="pastePrev" style="margin-top:8px"></p>
+    <div class="sfoot"><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-pastego>Add to protocol</button></div>`, "Paste your list");
+}
+function addSheet(mode) {
+  openSheet(`<div class="shd"><h2>${mode === "watch" ? "Watch a peptide" : "Add an item"}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
+    <label class="msearch" style="display:flex;height:48px;border:1px solid var(--border-2);border-radius:12px;align-items:center;gap:10px;padding:0 14px">${I.search.replace("<svg", '<svg style="width:18px;height:18px"')}<input id="addQ" type="search" placeholder="Search peptides" style="flex:1;border:0;background:none;outline:none;height:100%;font-size:16px" autocomplete="off" aria-label="Search peptides"></label>
+    <div id="addRes" class="vlist" style="margin-top:8px" data-mode="${mode || "proto"}">${addRes("", mode)}</div>`, "Add an item");
+  setTimeout(() => $("#addQ")?.focus(), 60);
+}
+function addRes(q, mode) {
+  q = q.toLowerCase();
+  return PEPS.filter(p => !q || p.toLowerCase().includes(q)).slice(0, 30).map(p => { const sizes = [...new Set(live().filter(r => r.pep === p).map(r => r.size))].sort((a, b) => parseFloat(a) - parseFloat(b)); return `<div class="srow"><span><b style="font-weight:600">${esc(p)}</b><small>${esc(catOf(p))}</small></span><span class="row" style="gap:6px;justify-content:flex-end">${sizes.slice(0, 4).map(s => `<button class="chip" type="button" data-addpick="${esc(p)}|${esc(s)}" data-mode="${mode || "proto"}" style="height:36px">${esc(sizeTxt(s))}</button>`).join("")}</span></div>`; }).join("") || `<p class="hint">No peptides match.</p>`;
+}
+function swapSheet(p, s) {
+  const all = live().filter(r => r.pep === p).sort((a, b) => a.sv - b.sv || a.price - b.price);
+  openSheet(`<div class="shd"><h2>${esc(short(p))}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div><p class="hint">Every offer we track. Pick a size to change this item; the cart strategy picks the vendor.</p>
+    <div class="ssec">${all.map(r => `<button type="button" class="srow" data-setsize="${esc(p)}|${esc(s)}|${esc(r.size)}"><span><b style="font-weight:600">${esc(V[r.v].name)}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span><small>${r.stock ? "In stock" : "Out of stock"} · ${repTxt(V[r.v])}${r.coa === true ? " · COA ✓" : ""}</small></span><span class="mono"><b>${money2(r.price)}</b></span></button>`).join("")}</div>`, short(p));
+}
+
+/* ---------- carried-over flows: review, owner, install/push ---------- */
+
+/* ---------- write a review (3 steps) ---------- */
+let RW = null;
+function openReview(vendor) {
+  RW = { step: vendor ? 1 : 0, vendor: vendor || "", stars: 0, tags: [], body: "", peptide: "", file: null, preview: "", order: "", name: store.get("pf_rname", ""), email: "", err: "", busy: false };
+  renderReview(); openSheet(null, "Write a review");
+}
+function renderReview() {
+  const r = RW, v = V[r.vendor], steps = 3;
+  const prog = `<div class="prog" aria-hidden="true">${[1, 2, 3].map(i => `<i class="${r.step >= i ? "on" : ""}"></i>`).join("")}</div>`;
+  let h = "";
+  if (r.done) h = `<div class="done"><svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/><path d="M20 33l8 8 16-17" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg><h2>Thanks, your review is in</h2><p class="hint" style="max-width:36ch">We'll check your receipt and post the review, usually within a day. Your receipt is deleted after the check.</p><button class="btn p full" type="button" data-rw="close">Done</button></div>`;
+  else if (r.step === 0) h = `<h2>Which seller did you buy from?</h2><div class="vlist" style="margin-top:8px">${Object.values(V).sort((a, b) => a.name.localeCompare(b.name)).map(x => `<button type="button" data-rwv="${esc(x.id)}">${avatar(x)}<span>${esc(x.name)}</span></button>`).join("")}</div>`;
+  else if (r.step === 1) {
+    const peps = [...new Set(ROWS.filter(x => x.v === r.vendor).map(x => x.pep))].sort();
+    h = `${prog}<h2>How was your order from ${esc(v.name)}?</h2>
+      <div class="starpick" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map(i => `<button type="button" role="radio" aria-checked="${r.stars === i}" aria-label="${i} star${i > 1 ? "s" : ""}" class="${r.stars >= i ? "on" : ""}" data-rws="${i}">${STARF}</button>`).join("")}</div><div class="starword">${STARWORD[r.stars] || "Tap a star"}</div>
+      ${r.stars ? `<p class="hint" style="margin:14px 0 8px">Anything stand out? Tap all that fit.</p><div class="toggles">${(r.stars >= 3 ? TAGS_POS.concat(TAGS_NEG) : TAGS_NEG.concat(TAGS_POS)).map(t => `<button type="button" class="chip" data-rwt="${esc(t)}" aria-pressed="${r.tags.includes(t)}">${esc(t)}</button>`).join("")}</div>
+      <div style="display:grid;gap:12px;margin-top:16px"><label class="lbl-f">What did you buy? <small>Optional</small><select class="field" id="rwPep"><option value="">Choose a peptide</option>${peps.map(p => `<option ${p === r.peptide ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+      <label class="lbl-f">Tell other buyers about it <small>Optional. Shipping time, packaging, how support treated you.</small><textarea class="field" id="rwBody" maxlength="2000">${esc(r.body)}</textarea></label></div>` : ""}
+      <button class="btn p full" type="button" data-rw="next" style="margin-top:16px" ${r.stars ? "" : "disabled"}>Next</button>`;
+  } else if (r.step === 2) {
+    h = `${prog}<h2>Show us it was your order</h2><p class="hint" style="margin:6px 0 14px">Add a screenshot of the order confirmation email or invoice. We only need the seller's name, the order number and the date, so feel free to cover your address and card details. We delete it after the check.</p>
+      <label class="drop ${r.file ? "has" : ""}">${r.preview ? `<img src="${r.preview}" alt="Your receipt">` : r.file ? `<b>${esc(r.file.name)}</b>` : `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>Add a photo or screenshot</b><span class="hint">JPG, PNG or PDF, up to 10 MB</span>`}${r.file ? `<span class="link">Change file</span>` : ""}<input type="file" id="rwFile" accept="image/*,application/pdf"></label>
+      <label class="lbl-f" style="margin-top:14px">Order number <small>It's on the confirmation, often near the top.</small><input class="field" id="rwOrder" value="${esc(r.order)}" autocomplete="off" inputmode="text" placeholder="e.g. 10482"></label>
+      <div class="row" style="margin-top:16px"><button class="btn" type="button" data-rw="back">Back</button><button class="btn p" style="flex:1" type="button" data-rw="next">Next</button></div>`;
+  } else if (r.step === 3) {
+    h = `${prog}<h2>Last step</h2>
+      <div style="display:grid;gap:12px;margin-top:12px"><label class="lbl-f">Name on your review <small>First name and last initial works well.</small><input class="field" id="rwName" value="${esc(r.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Mike W."></label>
+      <label class="lbl-f">Email <small>Optional. Only used if we have a question about your receipt. Never shown.</small><input class="field" id="rwEmail" type="email" value="${esc(r.email)}" autocomplete="email" inputmode="email"></label></div>
+      <div class="box" style="margin-top:14px;padding:14px"><div>${stars(r.stars)} <b>${esc(v.name)}</b></div>${r.tags.length ? `<div class="hint">${esc(r.tags.join(", "))}</div>` : ""}</div>
+      <div class="row" style="margin-top:16px"><button class="btn" type="button" data-rw="back">Back</button><button class="btn p" style="flex:1" type="button" data-rw="submit" ${r.busy ? "disabled" : ""}>${r.busy ? "Sending…" : "Post review"}</button></div>`;
+  }
+  $("#sheet").innerHTML = `<div class="grab"></div>${h}${r.err ? `<p class="err" role="alert">${esc(r.err)}</p>` : ""}`;
+}
+function rwCapture() {
+  if (!RW) return;
+  const g = id => $("#" + id);
+  if (g("rwPep")) RW.peptide = g("rwPep").value;
+  if (g("rwBody")) RW.body = g("rwBody").value;
+  if (g("rwOrder")) RW.order = g("rwOrder").value;
+  if (g("rwName")) RW.name = g("rwName").value;
+  if (g("rwEmail")) RW.email = g("rwEmail").value;
+}
+async function rwSubmit() {
+  rwCapture(); RW.err = "";
+  if (!RW.name.trim()) { RW.err = "Add the name to show on your review."; renderReview(); return; }
+  RW.busy = true; renderReview();
+  const f = new FormData();
+  f.append("vendor", RW.vendor); f.append("stars", RW.stars); f.append("tags", JSON.stringify(RW.tags)); f.append("body", RW.body); f.append("peptide", RW.peptide);
+  f.append("order", RW.order); f.append("name", RW.name.trim()); f.append("email", RW.email.trim()); f.append("receipt", RW.file, RW.file.name || "receipt.jpg");
+  try { await fnPost(f); store.set("pf_rname", RW.name.trim()); RW.done = true; RW.busy = false; renderReview(); }
+  catch (e) { RW.busy = false; RW.err = e.message; renderReview(); }
+}
+async function shrink(file) {
+  // Phone photos can be 5–10 MB; resize images client-side so uploads are quick on cell data.
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1.5e6) return file;
+  try {
+    const bmp = await createImageBitmap(file); const k = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise(res => c.toBlob(res, "image/jpeg", .85));
+    return blob ? new File([blob], "receipt.jpg", { type: "image/jpeg" }) : file;
+  } catch { return file; }
+}
+
+/* ---------- owner tools ---------- */
+const ownerKey = () => store.get("pf_admin", store.get("vs_admin", ""));
+function why(st) {
+  const s = st.status || "";
+  if (!s) return "Waiting for its first price check";
+  if (/^ok/.test(s)) return `${st.count ?? 0} listings, checked ${ago(st.at)}`;
+  if (/ 40[13]/.test(s)) return "This store blocks automatic price checks";
+  if (/ 429/.test(s)) return "Store is limiting requests. Try again later";
+  if (/ 404/.test(s)) return "Couldn't find a product catalog at this address";
+  if (/ 5\d\d/.test(s)) return "Store's site is down or behind a firewall";
+  if (/sending request|dns|connect/i.test(s)) return "Couldn't connect to this store's site";
+  if (/non-json/.test(s)) return "Store's catalog isn't in a format we can read";
+  return "Couldn't read this store's prices";
+}
+async function renderOwner() {
+  const el = $("#owner"); if (!el) return; const key = ownerKey(); if (!key) return;
+  try {
+    const [q, sts] = await Promise.all([fnPost({ action: "pending", key }), rpc("vs_store_status", { p_key: key })]);
+    el.innerHTML = `<h3 style="margin-bottom:10px">Reviews to check (${q.reviews.length})</h3>
+      <div class="queue">${q.reviews.map(r => `<div class="qi"><div>${stars(r.stars)} <b>${esc(r.display_name)}</b> reviewing <b>${esc(V[r.vendor_id]?.name || r.vendor_id)}</b></div>
+        ${r.peptide ? `<div class="hint">Bought ${esc(r.peptide)}</div>` : ""}${r.body ? `<p style="margin:0">${esc(r.body)}</p>` : ""}${r.tags?.length ? `<div class="hint">${esc(r.tags.join(", "))}</div>` : ""}
+        ${r.receipt_url ? (/\.pdf\?/i.test(r.receipt_url) ? `<a class="link" href="${esc(r.receipt_url)}" target="_blank" rel="noopener">Open receipt (PDF)</a>` : `<a href="${esc(r.receipt_url)}" target="_blank" rel="noopener"><img src="${esc(r.receipt_url)}" alt="Receipt"></a>`) : `<span class="err">No receipt attached</span>`}
+        <p class="hint" style="margin:0">Check that the receipt shows ${esc(V[r.vendor_id]?.name || "this seller")}, an order number, and a date.${r.email ? ` Contact: ${esc(r.email)}` : ""}</p>
+        <div class="row"><button class="btn" style="flex:1" type="button" data-mod="reject" data-id="${r.id}">Reject</button><button class="btn p" style="flex:1" type="button" data-mod="approve" data-id="${r.id}">Approve</button></div></div>`).join("") || `<div class="hint">Nothing waiting. New reviews show up here.</div>`}</div>
+      <h3 style="margin:24px 0 6px">Sellers we check</h3><div class="slist">${sts.map(st => { const bad = st.status && !/^ok/.test(st.status); return `<div class="li" style="grid-template-columns:1fr auto auto"><span><span style="font-weight:600">${esc(st.name)}</span><br><span class="hint" style="${bad ? "color:var(--sale)" : ""}">${esc(why(st))}</span></span>${st.active ? `<button class="btn sm line" type="button" data-recheck="${esc(st.id)}">Check now</button>` : `<span></span>`}<button type="button" role="switch" aria-checked="${!!st.active}" aria-label="Show ${esc(st.name)}" data-store="${esc(st.id)}" data-name="${esc(st.name)}" data-on="${st.active ? 1 : 0}" style="min-height:44px;display:grid;place-items:center"><span class="tog"><i></i></span></button></div>`; }).join("")}</div>
+      <form class="box" id="addStore" style="margin-top:14px"><h3>Add a seller</h3><input class="field" id="addName" placeholder="Seller name" required><input class="field" id="addUrl" type="url" inputmode="url" placeholder="https://seller.com" required><button class="btn" type="submit">Add and check prices</button><p class="hint">Works with WooCommerce, Shopify and most custom stores. Some stores block automatic checks; you'll see why here.</p></form>
+      <button class="link" type="button" id="adminOut" style="margin-top:12px">Lock owner tools</button>`;
+  } catch (e) { if (/authorized/i.test(e.message)) { store.set("pf_admin", ""); store.set("vs_admin", ""); route(true); toast("That key didn't work"); } else el.innerHTML = `<div class="hint">Couldn't load owner tools: ${esc(e.message)}</div>`; }
+}
+async function watchStore(id, name) {
+  // Poll until the scrape for this store finishes (up to ~3 min), then refresh data and tell the owner what happened.
+  const key = ownerKey(); let before = null;
+  try { before = (await rpc("vs_store_status", { p_key: key })).find(s => s.id === id)?.at || null; } catch {}
+  for (let i = 0; i < 18; i++) {
+    await new Promise(r => setTimeout(r, 10000));
+    let st; try { st = (await rpc("vs_store_status", { p_key: key })).find(s => s.id === id); } catch { continue; }
+    if (st && st.at && st.at !== before) {
+      await load(); if (location.hash === "#vendors") renderOwner();
+      toast(/^ok/.test(st.status || "") ? `${name}: ${st.count} listings added` : `${name}: ${why(st)}`, 6000); return;
+    }
+  }
+  toast(`${name} is taking a while. Pull down to refresh in a few minutes.`, 6000);
+}
+
+/* ---------- install & push ---------- */
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+let deferredPrompt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredPrompt = e; });
+function installCard() {
+  if (isStandalone() || store.get("pf_hide_install", false)) return "";
+  return `<section><div class="box"><h3>Add PepSeekr to your home screen</h3>${isIOS() ? `<ol class="steps"><li>Tap <b>Share</b> in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Open PepSeekr from your home screen to turn on price alerts</li></ol>` : `<p class="hint">Open it like an app and get alerts when prices drop.</p><button class="btn p" id="installBtn" type="button">Install app</button>`}<button class="link" type="button" id="hideInstall" style="justify-self:start">Not now</button></div></section>`;
+}
+function pushState() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return isIOS() && !isStandalone() ? "needs-install" : "unsupported";
+  if (Notification.permission === "denied") return "denied";
+  return store.get("pf_push", store.get("vs_push", false)) && Notification.permission === "granted" ? "on" : "off";
+}
+function pushCard(compact) {
+  const st = pushState();
+  if (st === "on") return compact ? "" : `<div class="box"><h3>Alerts are on</h3><p class="hint">We'll notify you when anything on your protocol goes on sale, drops 5% or more, or comes back in stock.</p><div class="row"><button class="btn" id="testPush" type="button">Send a test</button><button class="btn" id="pushOff" type="button">Turn off alerts</button></div></div>`;
+  if (st === "needs-install") return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">On iPhone, alerts work once PepSeekr is on your home screen.</p><ol class="steps"><li>Tap <b>Share</b> in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Open it from your home screen and come back here</li></ol></div>`;
+  if (st === "denied") return `<div class="box"><h3>Notifications are off for PepSeekr</h3><p class="hint">Turn them on in your phone's Settings under Notifications, then reopen PepSeekr.</p></div>`;
+  if (st === "unsupported") return compact ? "" : `<div class="box"><p class="hint">This browser can't get alerts. Use Safari on iPhone (from the home screen) or Chrome on Android.</p></div>`;
+  return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">We'll notify you when anything on your protocol goes on sale, drops 5% or more, or comes back in stock.</p><button class="btn p" id="pushOn" type="button">Turn on alerts</button></div>`;
+}
+const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+const ab64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function pushOn() {
+  try {
+    const perm = await Notification.requestPermission(); if (perm !== "granted") { toast("Notifications weren't allowed"); route(); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID) });
+    await syncSub(sub); store.set("pf_push", true); toast("Alerts are on"); route();
+  } catch (e) { toast("Couldn't turn on alerts: " + (e.message || e)); }
+}
+async function syncSub(sub) {
+  sub = sub || await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (!sub) return;
+  const k = sub.toJSON().keys || { p256dh: ab64(sub.getKey("p256dh")), auth: ab64(sub.getKey("auth")) };
+  await rpc("pf_subscribe", { p_endpoint: sub.endpoint, p_p256dh: k.p256dh, p_auth: k.auth, p_protocol: [...new Set([...PROT.map(i => i.pep), ...Object.keys(WATCH).filter(k => WATCH[k].on).map(k => k.split("|")[0])])] });
+}
+async function pushOff() {
+  try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) { await rpc("pf_unsubscribe", { p_endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
+  store.set("pf_push", false); store.set("vs_push", false); toast("Alerts turned off"); route();
+}
+async function testPush() { const reg = await navigator.serviceWorker.ready; reg.showNotification("PepSeekr", { body: "Alerts are working. Deals on your protocol will show up here.", icon: "/icon-192.png", badge: "/icon-192.png", data: { url: "/#alerts" } }); }
+
+
+function reviewItem(r, withVendor) {
+  const v = V[r.v];
+  return `<div class="rv"><div class="who"><b>${esc(r.name)}</b><span class="pill p-brand">Verified buyer</span><span class="t3">${r.at ? new Date(r.at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}</span></div>
+    <div class="row" style="gap:8px;margin-top:4px">${stars(r.stars)}${withVendor && v ? `<span class="hint">bought from <a class="link" href="#v-${esc(r.v)}">${esc(v.name)}</a></span>` : r.pep ? `<span class="hint">bought ${esc(r.pep)}</span>` : ""}</div>
+    ${r.body ? `<p>${esc(r.body)}</p>` : ""}${r.tags?.length ? `<div class="tags">${r.tags.map(t => `<span class="pill ${TAGS_NEG.includes(t) ? "p-n" : "p-brand"}">${esc(t)}</span>`).join("")}</div>` : ""}</div>`;
+}
+
+/* ---------- theme ---------- */
+function setTheme(t) {
+  const root = document.documentElement; root.classList.add("theming");
+  if (t === "system") { delete root.dataset.theme; try { localStorage.removeItem("pepseekr-theme"); } catch {} }
+  else { root.dataset.theme = t; try { localStorage.setItem("pepseekr-theme", t); } catch {} }
+  resolveTheme(); setTimeout(() => root.classList.remove("theming"), 260); route(true);
+}
+function resolveTheme() {
+  const root = document.documentElement, r = root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  root.dataset.resolved = r; $$('meta[name="theme-color"]').forEach(m => m.content = r === "dark" ? "#070B14" : "#EEF4FF");
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (!document.documentElement.dataset.theme) { resolveTheme(); route(true); } });
+
+/* ---------- sheet ---------- */
+let lastFocus = null;
+function openSheet(html, label) {
+  lastFocus = document.activeElement; const sh = $("#sheet");
+  if (html) sh.innerHTML = `<div class="grab" aria-hidden="true"></div>` + html;
+  if (label) sh.setAttribute("aria-label", label);
+  sh.classList.add("open"); $("#scrim").classList.add("open"); document.body.style.overflow = "hidden";
+  setTimeout(() => sh.querySelector("input,button:not([data-close]),select,textarea")?.focus({ preventScroll: true }), 60);
+}
+function closeSheet() {
+  const sh = $("#sheet"); if (!sh.classList.contains("open")) return;
+  sh.classList.remove("open"); sh.style.transform = ""; $("#scrim").classList.remove("open"); document.body.style.overflow = ""; RW = null;
+  lastFocus?.focus?.({ preventScroll: true });
+}
+(function dragToDismiss() {
+  let y0 = null, t0 = 0, dy = 0; const sh = () => $("#sheet");
+  addEventListener("pointerdown", e => { if (!isM() || !e.target.closest("#sheet") || (sh().scrollTop > 0 && !e.target.closest(".grab"))) return; if (!e.target.closest(".grab,.shd")) return; y0 = e.clientY; t0 = Date.now(); dy = 0; sh().classList.add("drag"); });
+  addEventListener("pointermove", e => { if (y0 === null) return; dy = Math.max(0, e.clientY - y0); sh().style.transform = `translateY(${dy}px)`; });
+  addEventListener("pointerup", () => { if (y0 === null) return; const v = dy / Math.max(1, Date.now() - t0); sh().classList.remove("drag"); if (dy > sh().offsetHeight * .3 || v > .6) closeSheet(); else sh().style.transform = ""; y0 = null; });
+})();
+function toast(m, ms = 3200) { const t = $("#toast"); t.textContent = m; t.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ms); }
+
+/* ---------- watch & protocol helpers ---------- */
+function toggleWatch(p, s) {
+  const k = p + "|" + s, w = WATCH[k];
+  if (w?.on) { w.on = false; toast(`Stopped watching ${short(p)} ${sizeTxt(s)}`); }
+  else { WATCH[k] = Object.assign({ target: null, drop: true, restock: true, sale: true }, w || {}, { on: true }); toast(`Watching ${short(p)} ${sizeTxt(s)}. We'll alert you on sales and drops.`); }
+  saveW(); route(true);
+}
+let syncT = 0;
+function syncPush() { if (pushState() !== "on") return; clearTimeout(syncT); syncT = setTimeout(() => syncSub().catch(() => {}), 800); }
+
+/* ---------- search suggestions ---------- */
+let sIdx = -1;
+function suggest(q) {
+  const el = $("#sugg"); if (!el) return; q = q.trim().toLowerCase();
+  if (!q) { el.classList.remove("open"); return; }
+  const ps = PEPS.filter(p => p.toLowerCase().includes(q) || short(p).toLowerCase().includes(q)).slice(0, 6), vs = Object.values(V).filter(v => v.name.toLowerCase().includes(q)).slice(0, 3);
+  el.innerHTML = ps.map(p => { const b = bestOf(live().filter(r => r.pep === p)); return `<a href="#p-${slugOf(p)}" role="option"><span class="vw">${vial(p, b?.size || "", 34)}</span><span>${esc(p)}<span class="hint" style="display:block">${esc(catOf(p))}</span></span><span class="r">${b ? "from " + money2(b.price) : ""}</span></a>`; }).join("") + vs.map(v => `<a href="#v-${esc(v.id)}" role="option"><span class="vw">${avatar(v)}</span><span>${esc(v.name)}<span class="hint" style="display:block">Vendor · score ${v.score}</span></span></a>`).join("") || `<p class="hint" style="padding:10px">Nothing matches “${esc(q)}”.</p>`;
+  el.classList.add("open"); sIdx = -1; el.parentElement.setAttribute("aria-expanded", "true");
+}
+function refreshGrid() {
+  const r = catalogGrid(location.hash === "#search" ? 0 : 24); if ($("#pgrid")) { $("#pgrid").innerHTML = r.html; $("#catmeta").textContent = `${r.n} peptides · ${r.offers} offers`; }
+  $$("[data-cat]").forEach(b => b.tagName === "BUTTON" && b.setAttribute("aria-pressed", b.dataset.cat === S.cat));
+}
+
+/* ---------- router ---------- */
+let lastRoute = "";
+function route(keepScroll) {
+  if (!D) return;
+  let h = (location.hash || "#home").slice(1);
+  if (h.startsWith("s-")) h = "v-" + h.slice(2);
+  if (h === "sellers") h = "vendors";
+  if (h === "alerts" || h === "watchlist") { if (lastRoute !== "alerts" && lastRoute !== "watchlist") openedAt = seenAlerts(); }
+  const y = scrollY; closeDD();
+  chrome();
+  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : vHome();
+  $("#view").innerHTML = view;
+  document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
+  if (h.startsWith("p-")) buyBar();
+  if (keepScroll && lastRoute === h) scrollTo(0, y); else if (h === "catalog") $("#catalog")?.scrollIntoView(); else if (h === "seller-log") $("#slog")?.scrollIntoView(); else scrollTo(0, 0);
+  lastRoute = h;
+  const pv = $("[data-pep]");
+  if (pv) { drawChart(pv.dataset.pep, pv.dataset.size); document.title = `${pv.dataset.pep} prices by vendor | PepSeekr`; }
+  else if (h.startsWith("v-") && V[h.slice(2)]) document.title = `${V[h.slice(2)].name}: score, prices, reviews | PepSeekr`;
+  else document.title = { vendors: "Vendors", coa: "COA library", protocol: "Shop my protocol", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] ? { vendors: "Vendors", coa: "COA library", protocol: "Shop my protocol", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] + " | PepSeekr" : "PepSeekr: the peptide price index";
+  if (h === "vendors" || h === "seller-log") { loadLog(); if (ownerKey()) renderOwner(); }
+  if (h === "watchlist") sparks();
+  if (h === "alerts" || h === "watchlist") { store.set("pf_seen_alerts", ALERTS.length ? Math.max(Date.parse(ALERTS[0].at), seenAlerts()) : Date.now()); }
+  if (h === "search" && focusQ) { focusQ = false; $("#mq")?.focus(); }
+}
+let focusQ = false;
+function buyBar() {
+  const pv = $("[data-pep]"); if (!pv) return;
+  const p = pv.dataset.pep, s = pv.dataset.size, list = vis(live().filter(r => r.pep === p && r.size === s)), b = bestPrice(list) || bestPrice(live().filter(r => r.pep === p && r.size === s));
+  $("#mbuy").innerHTML = b ? `<button class="mib" type="button" data-watch="${esc(p)}" data-size="${esc(s)}" aria-pressed="${isW(p, s)}" aria-label="${isW(p, s) ? "Stop watching" : "Watch"}" style="color:${isW(p, s) ? "var(--brand)" : "inherit"}">${I.star}</button><div class="bp"><span class="lbl">Best price</span><b>${money2(b.price)}</b><span>${esc(V[b.v].name)}</span></div><a class="btn p" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy ${I.chev}</a>` : "";
+}
+function closeDD() { $("#dd")?.classList.remove("open"); $("#bell")?.setAttribute("aria-expanded", "false"); }
+
+/* ---------- events ---------- */
+document.addEventListener("click", async e => {
+  const t = e.target;
+  if (!t.closest(".nsearch")) $("#sugg")?.classList.remove("open");
+  if (t.closest("#bell")) { const dd = $("#dd"), open = !dd.classList.contains("open"); if (open) { bellDD(); dd.classList.add("open"); $("#bell").setAttribute("aria-expanded", "true"); } else closeDD(); return; }
+  if (!t.closest(".bellwrap")) closeDD();
+  if (t.closest('a[href="#search"]')) focusQ = true;
+  const th = t.closest("[data-theme-set]"); if (th) { setTheme(th.dataset.themeSet); return; }
+  if (t.closest("[data-back]")) { history.length > 1 ? history.back() : location.hash = "#home"; return; }
+  const wt = t.closest("[data-watch]"); if (wt) { e.preventDefault(); toggleWatch(wt.dataset.watch, wt.dataset.size); return; }
+  const cat = t.closest("[data-cat]"); if (cat) {
+    S.cat = cat.dataset.cat;
+    if (cat.tagName === "A") { if (location.hash === "#home" || !location.hash) { e.preventDefault(); refreshGrid(); $("#catalog")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth" }); } return; }
+    if (location.hash === "#home" || location.hash === "#search" || !location.hash) { if (isM() && (location.hash || "#home") === "#home" && !$("#sheet").classList.contains("open")) { location.hash = "#search"; return; } refreshGrid(); }
+    return;
+  }
+  const fl = t.closest("[data-filt]"); if (fl) { S[fl.dataset.filt] = !S[fl.dataset.filt]; saveS(); $$(`[data-filt="${fl.dataset.filt}"]`).forEach(x => x.setAttribute("aria-checked", S[fl.dataset.filt])); if ($("#sheet").classList.contains("open")) { const b = $("#sheet .sfoot .btn.p"); if (b) b.textContent = `Show ${vis().length} offers`; refreshGrid(); } else route(true); return; }
+  if (t.closest("[data-clearf]")) { Object.assign(S, { rep: false, stock: false, coa: false, ship: false, vendor: "", cat: "All", q: "" }); saveS(); if ($("#sheet").classList.contains("open")) filterSheet(); route(true); return; }
+  const so = t.closest("[data-sortopt]"); if (so) { S.sort = so.dataset.sortopt; saveS(); $$("[data-sortopt]").forEach(x => x.setAttribute("aria-checked", x === so)); refreshGrid(); return; }
+  if (t.closest("[data-filters]")) { filterSheet(); return; }
+  if (t.closest("[data-stores]")) { storesSheet(); return; }
+  if (t.closest("[data-close]") || t.id === "scrim") { closeSheet(); route(true); return; }
+  const hd = t.closest("[data-hide]"); if (hd) { const id = hd.dataset.hide; HIDE.has(id) ? HIDE.delete(id) : HIDE.add(id); store.set("pf_hidden", [...HIDE]); hd.setAttribute("aria-checked", !HIDE.has(id)); if (!$("#sheet").classList.contains("open")) route(true); return; }
+  const sz = t.closest("[data-sz]"); if (sz) { curSize[$("[data-pep]").dataset.pep] = sz.dataset.sz; route(true); return; }
+  const fo = t.closest("[data-follow]"); if (fo) { const id = fo.dataset.follow; FOLLOW.has(id) ? FOLLOW.delete(id) : FOLLOW.add(id); store.set("pf_follow", [...FOLLOW]); toast(FOLLOW.has(id) ? `You'll see ${V[id].name}'s sales in Alerts` : `Stopped following ${V[id].name}`); route(true); return; }
+  const vr = t.closest("[data-vrf]"); if (vr) { vrf = vr.dataset.vrf; route(true); return; }
+  const cv = t.closest("[data-coav]"); if (cv) { coaV = cv.dataset.coav; route(true); return; }
+  if (t.closest("[data-settarget]")) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size, v = parseFloat($("#tgt").value); WATCH[k] = Object.assign({ drop: true, restock: true, sale: true }, WATCH[k] || {}, { on: true, target: isFinite(v) && v > 0 ? v : null }); saveW(); toast(isFinite(v) && v > 0 ? `We'll alert you when ${short(pv.dataset.pep)} ${sizeTxt(pv.dataset.size)} drops below ${money2(v)}` : "Watching for sales and drops"); route(true); return; }
+  const wk = t.closest("[data-wk]"); if (wk) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size; WATCH[k] = Object.assign({ target: null, on: true, drop: true, restock: true, sale: true }, WATCH[k] || {}); WATCH[k][wk.dataset.wk] = !(WATCH[k][wk.dataset.wk] !== false); wk.setAttribute("aria-checked", WATCH[k][wk.dataset.wk]); saveW(); return; }
+  const wo = t.closest("[data-won]"); if (wo) { const w = WATCH[wo.dataset.won]; w.on = !w.on; wo.setAttribute("aria-checked", w.on); saveW(); return; }
+  const np = t.closest("[data-npref]"); if (np) { const k = "pf_n_" + np.dataset.npref, v = !store.get(k, true); store.set(k, v); np.setAttribute("aria-checked", v); return; }
+  if (t.closest("[data-markread]")) { store.set("pf_seen_alerts", Date.now()); openedAt = Date.now(); closeDD(); route(true); return; }
+  const af = t.closest("[data-afilt]"); if (af) { afilt = af.dataset.afilt; route(true); return; }
+  const as = t.closest("[data-aseg]"); if (as) { location.hash = "#" + as.dataset.aseg; return; }
+  // protocol
+  const im = t.closest("[data-imp]"); if (im) { if (im.tagName === "A") { if (im.dataset.imp === "paste") setTimeout(pasteSheet, 50); else setTimeout(() => $("#pdfIn")?.click(), 120); return; } e.preventDefault(); pasteSheet(); return; }
+  if (t.closest("[data-pastego]")) { const f = parseList($("#pasteTxt").value); if (!f.length) { $("#pastePrev").textContent = "We didn't recognize any compounds. Check the spelling, one per line."; return; } const n = addItems(f); closeSheet(); if (location.hash !== "#protocol") location.hash = "#protocol"; else route(); toast(`Added ${n} item${n === 1 ? "" : "s"} to your protocol`); return; }
+  const ai = t.closest("[data-additem]"); if (ai) { addSheet(ai.dataset.additem); return; }
+  const ap = t.closest("[data-addpick]"); if (ap) { const [p, s] = ap.dataset.addpick.split("|"); if (ap.dataset.mode === "watch") { WATCH[p + "|" + s] = { target: null, on: true, drop: true, restock: true, sale: true }; saveW(); toast(`Watching ${short(p)} ${sizeTxt(s)}`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}`); } closeSheet(); route(true); return; }
+  const st = t.closest("[data-strat]"); if (st) { S.strat = st.dataset.strat; saveS(); route(true); return; }
+  const q = t.closest("[data-qty]"); if (q) { const [p, s, d] = q.dataset.qty.split("|"); const it = PROT.find(i => i.pep === p && i.size === s); it.qty = Math.max(1, Math.min(20, it.qty + +d)); saveP(); route(true); return; }
+  const rm = t.closest("[data-rm]"); if (rm) { const [p, s] = rm.dataset.rm.split("|"); PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)}`); route(true); return; }
+  const sw = t.closest("[data-swap]"); if (sw) { const [p, s] = sw.dataset.swap.split("|"); swapSheet(p, s); return; }
+  const ss = t.closest("[data-setsize]"); if (ss) { const [p, s, n] = ss.dataset.setsize.split("|"); const it = PROT.find(i => i.pep === p && i.size === s); if (it && !PROT.some(i => i.pep === p && i.size === n && i !== it)) { it.size = n; saveP(); } closeSheet(); route(true); return; }
+  // suggest-a-seller kind
+  const kd = t.closest("[data-kind]"); if (kd) { $$("[data-kind]").forEach(x => x.setAttribute("aria-checked", x === kd)); return; }
+  // review flow
+  const rv = t.closest("[data-review]"); if (rv) { openReview(rv.dataset.review); return; }
+  const rwv = t.closest("[data-rwv]"); if (rwv) { RW.vendor = rwv.dataset.rwv; RW.step = 1; renderReview(); return; }
+  const rws = t.closest("[data-rws]"); if (rws) { rwCapture(); RW.stars = +rws.dataset.rws; renderReview(); return; }
+  const rwt = t.closest("[data-rwt]"); if (rwt) { rwCapture(); const tg = rwt.dataset.rwt; RW.tags = RW.tags.includes(tg) ? RW.tags.filter(x => x !== tg) : [...RW.tags, tg]; rwt.setAttribute("aria-pressed", RW.tags.includes(tg)); return; }
+  const rw = t.closest("[data-rw]"); if (rw) {
+    const a = rw.dataset.rw; rwCapture(); RW.err = "";
+    if (a === "close") { closeSheet(); return; }
+    if (a === "back") { RW.step--; renderReview(); return; }
+    if (a === "next") { if (RW.step === 2) { if (!RW.file) { RW.err = "Add a photo or screenshot of your receipt."; renderReview(); return; } if (RW.order.trim().length < 3) { RW.err = "Add the order number from your receipt."; renderReview(); return; } } RW.step++; renderReview(); return; }
+    if (a === "submit") { rwSubmit(); return; }
+  }
+  // owner
+  const md = t.closest("[data-mod]"); if (md) { md.disabled = true; try { await fnPost({ action: md.dataset.mod, key: ownerKey(), id: +md.dataset.id }); toast(md.dataset.mod === "approve" ? "Review posted" : "Review rejected"); await loadReviews(); score(); renderOwner(); } catch (err) { toast(err.message); md.disabled = false; } return; }
+  const sw2 = t.closest("[data-store]"); if (sw2) { const on = sw2.dataset.on !== "1", name = sw2.dataset.name; try { await rpc("pf_admin", { p_key: ownerKey(), p_action: on ? "on" : "off", p_id: sw2.dataset.store }); sw2.dataset.on = on ? "1" : "0"; sw2.setAttribute("aria-checked", on); if (on) { toast(`Checking ${name}'s prices. This takes about a minute.`, 5000); watchStore(sw2.dataset.store, name); } else { toast(`${name} hidden`); await load(); renderOwner(); } } catch (err) { toast("Couldn't update: " + err.message); } return; }
+  const rc = t.closest("[data-recheck]"); if (rc) { const s2 = rc.dataset.recheck; rc.disabled = true; rc.textContent = "Checking…"; try { await rpc("pf_admin", { p_key: ownerKey(), p_action: "on", p_id: s2 }); watchStore(s2, V[s2]?.name || s2); } catch (err) { toast(err.message); } return; }
+  if (t.closest("#pushOn")) { pushOn(); return; }
+  if (t.closest("#pushOff")) { pushOff(); return; }
+  if (t.closest("#testPush")) { testPush(); return; }
+  if (t.closest("#adminGo")) { const k = $("#adminKey").value.trim(); try { await rpc("pf_admin", { p_key: k, p_action: "check", p_id: "-" }); store.set("pf_admin", k); toast("Owner tools unlocked"); route(true); } catch { toast("That key didn't work"); } return; }
+  if (t.closest("#adminOut")) { store.set("pf_admin", ""); store.set("vs_admin", ""); route(true); return; }
+});
+document.addEventListener("change", async e => {
+  const t = e.target;
+  if (t.id === "vsel") { S.vendor = t.value; route(true); }
+  if (t.id === "sortSel") { S.sort = t.value; saveS(); refreshGrid(); }
+  if (t.id === "pdfIn" && t.files[0]) importPdf(t.files[0]);
+  if (t.dataset.tgt) { const v = parseFloat(t.value); WATCH[t.dataset.tgt].target = isFinite(v) && v > 0 ? v : null; saveW(); route(true); }
+  if (t.id === "rwFile" && RW) { const f0 = t.files[0]; if (!f0) return; rwCapture(); RW.file = await shrink(f0); RW.preview = /^image\/(jpeg|png|webp|gif)$/.test(RW.file.type) ? URL.createObjectURL(RW.file) : ""; RW.err = ""; renderReview(); }
+});
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.id === "nq") { S.q = t.value; suggest(t.value); if ((location.hash || "#home") === "#home" || location.hash === "#search") refreshGrid(); }
+  if (t.id === "mq") { S.q = t.value; if (location.hash !== "#search") { focusQ = true; location.hash = "#search"; } else refreshGrid(); }
+  if (t.id === "addQ") $("#addRes").innerHTML = addRes(t.value, $("#addRes").dataset.mode);
+  if (t.id === "pasteTxt") { const f = parseList(t.value); $("#pastePrev").textContent = f.length ? "Found: " + f.map(x => short(x.pep) + " " + sizeTxt(x.size)).join(", ") : ""; }
+});
+document.addEventListener("submit", async e => {
+  if (e.target.id === "suggest") {
+    e.preventDefault(); const f = new FormData(e.target), kind = $("[data-kind][aria-checked=true]")?.dataset.kind || "buyer";
+    try { const r = await rpc("vs_suggest_seller", { p_url: f.get("url"), p_name: f.get("name") || null, p_kind: kind, p_email: f.get("email") || null, p_note: null }); e.target.reset(); toast(typeof r === "string" ? r : r?.message || (r?.status === "listed" ? "That store is already listed" : "Thanks. We'll vet it and add it if it passes."), 5000); }
+    catch (err) { toast("Couldn't send that: " + err.message); }
+    return;
+  }
+  if (e.target.id !== "addStore") return; e.preventDefault();
+  const name = $("#addName").value.trim(); let url = $("#addUrl").value.trim().replace(/\/+$/, ""); if (!/^https?:\/\//.test(url)) url = "https://" + url;
+  let id; try { id = new URL(url).hostname.replace(/^www\./, "").split(".")[0].replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 24); } catch { toast("Check the web address"); return; }
+  try { await rpc("pf_admin", { p_key: ownerKey(), p_action: "add", p_id: id, p_name: name, p_url: url }); toast(`Checking ${name}'s prices. This takes about a minute.`, 5000); renderOwner(); watchStore(id, name); } catch (err) { toast("Couldn't add: " + err.message); }
+});
+document.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); if (isM()) { focusQ = true; location.hash = "#search"; } else $("#nq")?.focus(); return; }
+  if (e.key === "Escape") { closeSheet(); closeDD(); $("#sugg")?.classList.remove("open"); return; }
+  if (e.target.id === "nq" && ["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+    const opts = $$("#sugg a"); if (!opts.length) return;
+    if (e.key === "Enter") { e.preventDefault(); location.hash = (opts[Math.max(0, sIdx)]).getAttribute("href"); $("#sugg").classList.remove("open"); return; }
+    e.preventDefault(); sIdx = (sIdx + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length; opts.forEach((o, i) => o.classList.toggle("on", i === sIdx));
+  }
+  if (e.key === "Enter" && e.target.id === "mq") e.target.blur();
+  if (e.key === "Tab" && $("#sheet").classList.contains("open")) {
+    const f = $$("#sheet button,#sheet a[href],#sheet input,#sheet select,#sheet textarea").filter(x => !x.disabled && x.offsetParent); if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  }
+});
+addEventListener("hashchange", () => { closeSheet(); route(); });
+let wasM = isM(); addEventListener("resize", () => { if (isM() !== wasM) { wasM = isM(); route(true); } });
+if (window.visualViewport) visualViewport.addEventListener("resize", () => document.body.classList.toggle("kb", isM() && visualViewport.height < innerHeight * .75));
+
+/* ---------- data load ---------- */
+async function loadReviews() { try { const r = await rpc("vs_reviews_public"); RV = { stats: r.stats || {}, recent: (r.recent || []) }; store.set("pf_reviews", RV); } catch {} }
+async function load() {
+  try {
+    const [d] = await Promise.all([rpc("market_catalog_json"), loadReviews()]);
+    store.set("pf_cache", { at: new Date().toISOString(), d });
+    const had = !!D; ingest(d); if (!$("#sheet").classList.contains("open")) route(had);
+  } catch {
+    const c = store.get("pf_cache", null);
+    if (c && !D) { ingest(c.d); route(); toast("Offline. Showing prices from " + ago(c.at)); }
+    else if (!D) $("#view").innerHTML = `<div class="wrap"><div class="card empty" style="margin-top:40px"><b>Can't reach PepSeekr</b><p>Check your connection and try again.</p><button class="btn" type="button" onclick="load()">Try again</button></div></div>`;
+  }
+}
+(function boot() {
+  resolveTheme();
+  RV = store.get("pf_reviews", RV);
+  const c = store.get("pf_cache", null);
+  if (c) { ingest(c.d); route(); }
+  else $("#view").innerHTML = `<div class="wrap"><div class="empty" style="margin-top:60px"><span class="dot"></span><p>Loading vendors and prices…</p></div></div>`;
+  load();
+  setInterval(() => { if (document.visibilityState === "visible") load(); }, 10 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && D && Date.now() - Date.parse(store.get("pf_cache", {}).at || 0) > 5 * 60 * 1000) load(); });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+})();
