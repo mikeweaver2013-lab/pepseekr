@@ -179,6 +179,8 @@ const coaB = (r, full) => {
   if (r.coa === false) return `<span class="pill p-warn" title="We checked the product page and found no certificate of analysis">No COA</span>`;
   return "";
 };
+// Same badge without a link, for use inside cards that are already links (a link inside a link breaks the card).
+const coaTag = (r, full) => coaB(r, full).replace(/^<a /, "<span ").replace(/ href="[^"]*" target="_blank" rel="noopener"/, "").replace(/<\/a>$/, "</span>");
 const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.promo_detail || "")}">${esc(v.promo_text.length > 34 ? v.promo_text.slice(0, 32) + "…" : v.promo_text)}</span>` : "";
 const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
 const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
@@ -267,7 +269,7 @@ function dealsList(n) {
   return res;
 }
 function dealCard(d, glow) {
-  return `<a class="card deal ${glow ? "glow" : ""}" href="#p-${slugOf(d.p)}"><span class="vw">${vial(d.p, d.s, 82)}</span><span class="bd"><span class="row" style="justify-content:space-between"><span class="lbl">vs market average</span>${coaB(d.b)}</span><div style="font-weight:600;margin-top:6px">${esc(short(d.p))} · ${esc(sizeTxt(d.s))}</div><div class="px">${money2(d.b.price)}<s>${money2(d.b.med)}</s></div><div class="ft"><span class="t2">${esc(V[d.b.v].name)}</span><span class="pct">−${d.pct}%</span></div></span></a>`;
+  return `<a class="card deal ${glow ? "glow" : ""}" href="#p-${slugOf(d.p)}"><span class="vw">${vial(d.p, d.s, 82)}</span><span class="bd"><span class="row" style="justify-content:space-between"><span class="lbl">vs market average</span>${coaTag(d.b)}</span><div style="font-weight:600;margin-top:6px">${esc(short(d.p))} · ${esc(sizeTxt(d.s))}</div><div class="px">${money2(d.b.price)}<s>${money2(d.b.med)}</s></div><div class="ft"><span class="t2">${esc(V[d.b.v].name)}</span><span class="pct">−${d.pct}%</span></div></span></a>`;
 }
 function vendorCard(v, glow) {
   return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div><span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
