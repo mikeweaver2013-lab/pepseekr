@@ -61,16 +61,20 @@ const wordmark = (ink) => `<span class="logo">${LOGO(ink)}<span>Pep<b>Seekr</b><
 
 /* ---------- categories ---------- */
 const CATS = [
-  ["GLP / Metabolic", 1, ["Retatrutide", "Tirzepatide", "Semaglutide", "Cagrilintide", "Survodutide", "Mazdutide", "Retatrutide + Cagrilintide", "5-Amino-1MQ", "SLU-PP-332", "AICAR", "AOD-9604", "Fragment 176-191", "MOTS-c"]],
-  ["Recovery", 2, ["BPC-157", "TB-500", "BPC-157 + TB-500", "GLOW (BPC/TB/GHK)", "KLOW (BPC/TB/GHK/KPV)", "BPC-157 + TB-500 + Cartalax", "KPV", "LL-37", "ARA-290", "Thymosin Alpha-1"]],
-  ["Growth hormone", 3, ["CJC-1295 (no DAC)", "CJC-1295 (DAC)", "CJC-1295 + Ipamorelin", "Ipamorelin", "Tesamorelin", "Tesamorelin + Ipamorelin", "Sermorelin", "GHRP-2", "GHRP-6", "Hexarelin", "IGF-1 LR3", "IGF-1 DES", "MGF", "PEG-MGF", "MK-677", "HGH 191AA"]],
-  ["Longevity / Skin", 4, ["NAD+", "SS-31", "Humanin", "GHK-Cu", "AHK-Cu", "Pal-GHK", "Snap-8", "Matrixyl", "Glutathione", "GHK-Cu + KPV", "Melanotan I", "Melanotan II"]],
-  ["Cognitive / Sleep", 5, ["Selank", "Semax", "Semax + Selank", "DSIP", "Dihexa", "P21", "Adamax", "Cerebrolysin", "PE-22-28", "Pinealon"]],
+  // Grouped by compound family, never by intended effect.
+  ["GLP & amylin analogs", 1, ["Retatrutide", "Tirzepatide", "Semaglutide", "Cagrilintide", "Survodutide", "Mazdutide", "Retatrutide + Cagrilintide"]],
+  ["BPC, TB & thymic peptides", 2, ["BPC-157", "TB-500", "BPC-157 + TB-500", "GLOW (BPC/TB/GHK)", "KLOW (BPC/TB/GHK/KPV)", "BPC-157 + TB-500 + Cartalax", "Thymosin Alpha-1"]],
+  ["GH secretagogues & fragments", 3, ["CJC-1295 (no DAC)", "CJC-1295 (DAC)", "CJC-1295 + Ipamorelin", "Ipamorelin", "Tesamorelin", "Tesamorelin + Ipamorelin", "Sermorelin", "GHRP-2", "GHRP-6", "Hexarelin", "IGF-1 LR3", "IGF-1 DES", "MGF", "PEG-MGF", "MK-677", "HGH 191AA", "AOD-9604", "Fragment 176-191"]],
+  ["Copper & cosmetic peptides", 4, ["GHK-Cu", "AHK-Cu", "Pal-GHK", "Snap-8", "Matrixyl", "GHK-Cu + KPV"]],
+  ["Neuropeptides", 5, ["Selank", "Semax", "Semax + Selank", "DSIP", "Dihexa", "P21", "Adamax", "Cerebrolysin", "PE-22-28", "Pinealon", "Oxytocin"]],
   ["Bioregulators", 6, ["Epitalon", "Thymalin", "Thymagen", "Thymogen", "Cartalax", "Cardiogen", "Crystagen", "Testagen", "Prostamax", "Vesugen", "Vesilut", "Pancragen", "Bronchogen", "Ovagen", "Cortagen", "Livagen", "Chonluten"]],
+  ["Mitochondrial peptides", 7, ["MOTS-c", "SS-31", "Humanin"]],
+  ["Melanocortins", 8, ["Melanotan I", "Melanotan II", "PT-141"]],
 ];
 const ALLCATS = [...CATS.map(c => c[0]), "Blends", "Other"];
 const catOf = p => (CATS.find(c => c[2].includes(p)) || [])[0] || (/ \+ /.test(p) ? "Blends" : "Other");
 const catN = c => (CATS.find(x => x[0] === c) || [])[1] || (c === "Blends" ? 7 : 8);
+const TILES = CATS.slice(0, 6);
 const capVar = p => `var(--cat-${catN(catOf(p))})`;
 const short = p => p.replace(/ \(no DAC\)/, " no DAC").replace(/ \(.*\)/, "").replace("BPC-157 + TB-500", "BPC + TB").replace("CJC-1295 + Ipamorelin", "CJC + Ipa").replace("Retatrutide + Cagrilintide", "Reta + Cagri");
 const PRIOR = { strong: 4.5, good: 4.2, mixed: 3.2, unrated: 3.8 };
@@ -128,8 +132,9 @@ function score() {
     v.rating = v.rvN ? (prior * 8 + v.rvAvg * v.rvN) / (8 + v.rvN) : prior;
     const rep = Math.max(0, Math.min(40, (v.rating - 3) / 2 * 40));
     const price = Math.max(0, Math.min(30, 15 + (1 - rel) * 60));
-    // COA (20): the share of this vendor's product pages where we found a certificate of analysis. Until pages are checked, a capped estimate from their stated policy.
-    const coa = v.coaKnown ? Math.round(20 * v.coaPct / 100) : /in-house/i.test(v.coa_note || "") ? 4 : v.coa_note ? 8 : 6;
+    // COA (20): the share of this vendor's product pages where we found a current certificate of analysis.
+    // If we can't check a store's pages (e.g. it blocks our checker), COA is neutral: 10 of 20, neither rewarded nor penalized.
+    const coa = v.coaKnown ? Math.round(20 * v.coaPct / 100) : 10;
     let ship = 5; if (v.free_ship_over != null) ship = v.free_ship_over <= 150 ? 10 : v.free_ship_over <= 250 ? 8 : 6;
     v.pts = { rep: Math.round(rep), price: Math.round(price), coa, ship };
     v.score = Math.round(rep + price + coa + ship);
@@ -202,18 +207,18 @@ function barcode(seed) {
 /* ---------- chrome: band, nav, mobile bars, footer ---------- */
 const newest = () => Object.values(V).map(v => Date.parse(v.last_scraped_at) || 0).reduce((a, b) => Math.max(a, b), 0);
 const pulled = () => newest() ? "pulled " + ago(new Date(newest()).toISOString()) : "loading";
-const curTab = () => { const h = (location.hash || "#home").slice(1); return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
+const curTab = () => { let h = (location.hash || "#home").slice(1); if (h === "list") h = "protocol"; return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
 function unread() { const since = seenAlerts(); return ALERTS.filter(a => Date.parse(a.at) > since && relevant(a)).length; }
 const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || PROT.some(i => ROWS.some(r => r.v === a.v && r.pep === i.pep)) : watchingPep(a.pep) || inProt(a.pep);
 const themeSel = () => document.documentElement.dataset.theme || "system";
 function chrome() {
   const tab = curTab(), n = unread(), cnt = `<span class="cnt" ${n ? "" : "hidden"}>${n > 9 ? "9+" : n}</span>`;
   const home = (location.hash || "#home") === "#home" || location.hash === "";
-  $("#band").innerHTML = home ? `<div class="band"><div class="wrap"><a href="#protocol"><span class="new">NEW</span>Shop my protocol: paste a list or drop a PDF and get the cheapest cart →</a><span class="r">${vendors().length} vendors · ${live().length} live listings · ${pulled()}</span></div></div>` : "";
+  $("#band").innerHTML = home ? `<div class="band"><div class="wrap"><a href="#list"><span class="new">NEW</span>My list: check off what you need and get the cheapest cart →</a><span class="r">${vendors().length} vendors · ${live().length} live listings · ${pulled()}</span></div></div>` : "";
   const nl = (h, t, k) => `<a href="#${h}" ${tab === k ? 'aria-current="page"' : ""}>${t}</a>`;
   const res = document.documentElement.dataset.resolved;
   $("#top").innerHTML = `<div class="wrap in"><a href="#home" aria-label="PepSeekr home">${wordmark()}</a>
-    <nav class="nav" aria-label="Main">${nl("home", "Index", "index")}${nl("vendors", "Vendors", "vendors")}${nl("coa", "COA library", "coa")}${nl("protocol", "Protocol", "protocol")}</nav>
+    <nav class="nav" aria-label="Main">${nl("home", "Index", "index")}${nl("vendors", "Vendors", "vendors")}${nl("coa", "COA library", "coa")}${nl("list", "My list", "protocol")}</nav>
     <div class="nsearch" role="combobox" aria-expanded="false" aria-haspopup="listbox">${I.search}<input id="nq" type="search" placeholder="Search peptides or vendors" autocomplete="off" aria-label="Search peptides or vendors" value="${esc(S.q)}"><span class="kbd">⌘K</span><div class="sugg" id="sugg" role="listbox"></div></div>
     <div class="acts"><div class="tt" role="radiogroup" aria-label="Theme"><button type="button" role="radio" aria-checked="${res === "light"}" data-theme-set="light" aria-label="Light">${I.sun}</button><button type="button" role="radio" aria-checked="${res === "dark"}" data-theme-set="dark" aria-label="Dark">${I.moon}</button></div>
     <a class="btn" href="#watchlist">${I.star} Watchlist <span class="mono t3">${Object.values(WATCH).filter(w => w.on).length}</span></a>
@@ -224,7 +229,7 @@ function chrome() {
   $("#mtop").innerHTML = `<div class="in">${pushed ? `<button class="mib back" type="button" data-back aria-label="Back">${I.back}</button><span class="ttl">${esc(ttl)}</span>` : `<a href="#home" aria-label="PepSeekr home">${wordmark()}</a><span class="sp"></span>`}
     <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a></div>`;
   const tb = (hh, t, k, icn, extra = "") => `<a href="#${hh}" ${tab === k ? 'aria-current="page"' : ""}><i>${icn}</i>${t}${extra}</a>`;
-  $("#tabbar").innerHTML = tb("home", "Index", "index", I.home) + tb("search", "Search", "search", I.search) + tb("protocol", "Protocol", "protocol", I.dl) + tb("alerts", "Alerts", "alerts", I.bell, cnt) + tb("watchlist", "Watchlist", "watchlist", I.star);
+  $("#tabbar").innerHTML = tb("home", "Index", "index", I.home) + tb("search", "Search", "search", I.search) + tb("list", "My list", "protocol", I.dl) + tb("alerts", "Alerts", "alerts", I.bell, cnt) + tb("watchlist", "Watchlist", "watchlist", I.star);
   $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything or take a cut from sellers; confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="#vendors">List your store</a> · <a href="#vendors">Suggest a seller</a> · <a href="#seller-log">Seller log</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
 }
 function bellDD() {
@@ -244,7 +249,7 @@ function alertCard(a) {
 function ctxTag(a) {
   const w = WATCH[a.pep + "|" + a.size];
   if (w?.target && a.now <= w.target) return `<span class="ctx">Below your ${money(w.target)} target</span>`;
-  if (inProt(a.pep)) return `<span class="ctx">On your protocol</span>`;
+  if (inProt(a.pep)) return `<span class="ctx">On your list</span>`;
   if (watchingPep(a.pep)) return `<span class="ctx">Watching</span>`;
   if (a.kind === "promo" && FOLLOW.has(a.v)) return `<span class="ctx">Following</span>`;
   return "";
@@ -301,7 +306,7 @@ function filtersBar() {
     <div class="r"><select class="btn sm" id="vsel" aria-label="Vendor"><option value="">All vendors</option>${vendors().map(v => `<option value="${esc(v.id)}" ${S.vendor === v.id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select><button class="btn sm" type="button" data-stores>${I.store} Stores</button></div></div>`;
 }
 function ctaBand() {
-  return `<div class="ctab"><div><span class="kick"><span class="lbl">Shop my protocol</span></span><h3 style="margin-top:10px">Paste your protocol. Get the cheapest COA-backed cart.</h3><p>We read the compound names and vial sizes, then price every item across ${vendors().length} vendors.</p></div><div class="row"><a class="btn p lg" href="#protocol" data-imp="paste">${I.paste} Paste a list</a><a class="btn lg" href="#protocol" data-imp="pdf">${I.file} Drop a PDF</a></div></div>`;
+  return `<div class="ctab"><div><span class="kick"><span class="lbl">My list</span></span><h3 style="margin-top:10px">Paste your list. Get the cheapest COA-backed cart.</h3><p>We read the compound names and vial sizes, then price every item across ${vendors().length} vendors.</p></div><div class="row"><a class="btn p lg" href="#list" data-imp="paste">${I.paste} Paste a list</a><a class="btn lg" href="#list" data-imp="pdf">${I.file} Drop a PDF</a></div></div>`;
 }
 
 /* ---------- home ---------- */
@@ -319,14 +324,14 @@ function vHome() {
       <p class="sub"><span class="donly">Every vial, every vendor, side by side: price per mg, COA on file, verified buyer reviews and shipping. Refreshed automatically.</span><span class="monly">Price per mg, COA on file, verified buyer reviews and shipping for every vendor.</span></p>
       <label class="msearch monly">${I.search}<input type="search" id="mq" placeholder="Search peptides or vendors" enterkeyhint="search" aria-label="Search peptides or vendors"><button class="mib" type="button" data-filters aria-label="Filters">${I.sliders}</button></label>
       <div class="stats"><div class="stat"><b>${vs.length}</b><span class="lbl">Vendors</span></div><div class="stat"><b>${Object.keys(g).length}</b><span class="lbl">Peptides</span></div><div class="stat"><b>${live().length}</b><span class="lbl">${isM() ? "Listings" : "Live listings"}</span></div></div>
-      <div class="ctas"><a class="btn p lg" href="#protocol">${I.dl} Import my protocol</a><a class="btn lg" href="#coa">Browse COA library</a></div></div>${spec}</div></section>
+      <div class="ctas"><a class="btn p lg" href="#list">${I.dl} Build my list</a><a class="btn lg" href="#coa">Browse COA library</a></div></div>${spec}</div></section>
   <div class="wrap">
     ${filtersBar()}
-    <div class="tiles">${CATS.map(([n, i]) => `<a class="ctile" style="--h:var(--cat-${i})" href="#catalog" data-cat="${esc(n)}"><span class="vw">${vial(CATS[i - 1][2][0], "", 44).replace(/<text[^]*?<\/text>/g, "")}</span><span style="min-width:0"><b>${esc(n)}</b><span>${c[n]} peptides</span></span></a>`).join("")}</div>
+    <div class="tiles">${TILES.map(([n, i]) => `<a class="ctile" style="--h:var(--cat-${i})" href="#catalog" data-cat="${esc(n)}"><span class="vw">${vial(CATS[i - 1][2][0], "", 44).replace(/<text[^]*?<\/text>/g, "")}</span><span style="min-width:0"><b>${esc(n)}</b><span>${c[n]} peptides</span></span></a>`).join("")}</div>
     ${sec("01", "Sale alerts", "Sales, price drops &amp; restocks", `Last 7 days · ${I.bell.replace("<svg", '<svg style="width:13px;height:13px;display:inline;vertical-align:-2px"')} alert me on watched items`, "#alerts")}
     ${sa.length ? `<div class="g4c hs">${sa.slice(0, isM() ? 8 : 4).map(alertCard).join("")}</div>` : `<div class="card empty"><span class="ei">${I.bell}</span><b>No sales or price drops this week</b><p>We check every 2 hours. Watch a vial to hear about it first.</p></div>`}
     ${vs.some(v => v.promo_text) ? `<div class="row hs promos" style="margin-top:12px">${vs.filter(v => v.promo_text).map(v => `<a class="chip" href="#v-${esc(v.id)}"><span class="pill p-sale">Store-wide</span>${esc(v.name)}: ${esc(v.promo_text)}</a>`).join("")}</div>` : ""}
-    <div class="monly">${sec("", "Categories", "Browse by category")}<div class="hs mchips"><button class="chip" type="button" data-cat="All" aria-pressed="${S.cat === "All"}">All <span>${c.All}</span></button>${CATS.map(([n, i]) => `<button class="chip" type="button" style="--h:var(--cat-${i})" data-cat="${esc(n)}" aria-pressed="${S.cat === n}">${esc(n)} <span>${c[n]}</span></button>`).join("")}</div></div>
+    <div class="monly">${sec("", "Categories", "Browse by category")}<div class="hs mchips"><button class="chip" type="button" data-cat="All" aria-pressed="${S.cat === "All"}">All <span>${c.All}</span></button>${TILES.map(([n, i]) => `<button class="chip" type="button" style="--h:var(--cat-${i})" data-cat="${esc(n)}" aria-pressed="${S.cat === n}">${esc(n)} <span>${c[n]}</span></button>`).join("")}</div></div>
     ${sec("02", "Best deals", "Best deals vs market average", "Same vial, same size, vendors rated 3.5★ and up", "#search")}
     ${deals.length ? `<div class="g3c">${deals.slice(0, isM() ? 4 : 6).map((d, i) => dealCard(d, i === 0)).join("")}</div>` : `<div class="card empty"><b>No standout deals right now</b><p>Loosen the filters or check back after the next price pull.</p></div>`}
     ${sec("03", "Who to buy from", "Who to buy from", "Score = reviews 40 + price 30 + COA 20 + shipping 10", "#vendors")}
@@ -555,12 +560,12 @@ function vProtocol() {
   const cmp = PROT.length > 1 && oneV ? (one
     ? `${esc(V[oneV].name)} has ${single.assign.length} of ${PROT.length - P.unavail.length} items. Splitting across stores would be ${diff > 0 ? money2(diff) + " cheaper" : diff < 0 ? money2(-diff) + " more" : "the same"}.`
     : `Best single store: ${esc(V[oneV].name)}, ${money2(single.total)}${single.missing.length ? ` for ${single.assign.length} of ${PROT.length - P.unavail.length} items` : ""} (${diff > 0 ? money2(diff) + " more" : "same price"}).`) : "";
-  return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">Shop my protocol</span></span><h1 class="h1" style="margin-top:12px">Your protocol, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors, shipping included.` : "Check off what you need. We find the cheapest way to buy it, shipping included, from one store or several."}</p></div></div>
+  return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">My list</span></span><h1 class="h1" style="margin-top:12px">Your list, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors, shipping included.` : "Check off what you need. We find the cheapest way to buy it, shipping included, from one store or several."}</p></div></div>
     <div class="imp"><button class="card itile" type="button" data-checklist><span class="hd">${I.list} Check off a list</span><span class="hint">Pick everything you need</span></button><button class="card itile" type="button" data-imp="paste"><span class="hd">${I.paste} Paste a list</span><span class="hint">Type or paste names</span></button><label class="card itile"><span class="hd">${I.file} PDF</span><span class="hint">Drop a file</span><input type="file" id="pdfIn" accept="application/pdf" aria-label="Import a PDF"></label></div>
     ${PROT.length ? `<div class="row" style="margin-top:16px;justify-content:space-between;gap:12px"><div class="row" style="gap:8px;flex-wrap:nowrap" role="radiogroup" aria-label="Strategy">${[["cheapest", "Cheapest"], ["value", "Best value"]].map(([k, t]) => `<button class="chip" type="button" role="radio" data-strat="${k}" aria-checked="${mode === k}" aria-pressed="${mode === k}">${t} <span class="mono">${money2((k === mode ? P : alt).total)}</span>${(k === mode ? P : alt).missing.length ? ` <span class="t3" style="font-size:12px">${(k === mode ? P : alt).assign.length} of ${PROT.length - P.unavail.length} items</span>` : ""}</button>`).join("")}</div>${oneCk}</div>
     <p class="hint" style="margin-top:8px">${mode === "value" ? "Skips vendors under ★ 3.0 and prefers listings with a COA on file. " : "Lowest total with shipping, comparing every mix of stores. "}${cmp}</p>
     <div class="dgrid" style="margin-top:16px"><div style="display:grid;gap:16px;min-width:0"><div class="monly">${sum}</div><div class="card"><div class="phd"><span class="lbl">Items · ${PROT.length}</span><button class="link" type="button" data-checklist>+ Add items</button></div><div class="items">${P.items.map(itemRow).join("")}</div></div></div><aside class="rail donly">${sum}</aside></div>` :
-    `<div class="card empty" style="margin-top:16px"><span class="ei">${I.list}</span><b>Your protocol is empty</b><p>Check off the vials you need, paste a list, or drop a PDF. We read names and vial sizes only.</p><button class="btn p" type="button" data-checklist>Check off a list</button></div>`}
+    `<div class="card empty" style="margin-top:16px"><span class="ei">${I.list}</span><b>Your list is empty</b><p>Check off the vials you need, paste a list, or drop a PDF. We read names and vial sizes only.</p><button class="btn p" type="button" data-checklist>Check off a list</button></div>`}
     </div>`;
 }
 let CHK = null;
@@ -669,7 +674,7 @@ function storesSheet() {
 function pasteSheet() {
   openSheet(`<div class="shd"><h2>Paste your list</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div><p class="hint">One compound per line, with the vial size if you know it. We read names and sizes only.</p>
     <textarea class="field" id="pasteTxt" style="height:180px;margin-top:12px" placeholder="BPC-157 10mg&#10;TB-500 5mg&#10;Retatrutide 20mg"></textarea><p class="hint" id="pastePrev" style="margin-top:8px"></p>
-    <div class="sfoot"><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-pastego>Add to protocol</button></div>`, "Paste your list");
+    <div class="sfoot"><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-pastego>Add to my list</button></div>`, "Paste your list");
 }
 function addSheet(mode) {
   openSheet(`<div class="shd"><h2>${mode === "watch" ? "Watch a peptide" : "Add an item"}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
@@ -814,11 +819,11 @@ function pushState() {
 }
 function pushCard(compact) {
   const st = pushState();
-  if (st === "on") return compact ? "" : `<div class="box"><h3>Alerts are on</h3><p class="hint">We'll notify you when anything on your protocol goes on sale, drops 5% or more, or comes back in stock.</p><div class="row"><button class="btn" id="testPush" type="button">Send a test</button><button class="btn" id="pushOff" type="button">Turn off alerts</button></div></div>`;
+  if (st === "on") return compact ? "" : `<div class="box"><h3>Alerts are on</h3><p class="hint">We'll notify you when anything on your list or watchlist goes on sale, drops 5% or more, or comes back in stock.</p><div class="row"><button class="btn" id="testPush" type="button">Send a test</button><button class="btn" id="pushOff" type="button">Turn off alerts</button></div></div>`;
   if (st === "needs-install") return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">On iPhone, alerts work once PepSeekr is on your home screen.</p><ol class="steps"><li>Tap <b>Share</b> in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Open it from your home screen and come back here</li></ol></div>`;
   if (st === "denied") return `<div class="box"><h3>Notifications are off for PepSeekr</h3><p class="hint">Turn them on in your phone's Settings under Notifications, then reopen PepSeekr.</p></div>`;
   if (st === "unsupported") return compact ? "" : `<div class="box"><p class="hint">This browser can't get alerts. Use Safari on iPhone (from the home screen) or Chrome on Android.</p></div>`;
-  return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">We'll notify you when anything on your protocol goes on sale, drops 5% or more, or comes back in stock.</p><button class="btn p" id="pushOn" type="button">Turn on alerts</button></div>`;
+  return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">We'll notify you when anything on your list or watchlist goes on sale, drops 5% or more, or comes back in stock.</p><button class="btn p" id="pushOn" type="button">Turn on alerts</button></div>`;
 }
 const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 const ab64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -839,7 +844,7 @@ async function pushOff() {
   try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) { await rpc("pf_unsubscribe", { p_endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
   store.set("pf_push", false); store.set("vs_push", false); toast("Alerts turned off"); route();
 }
-async function testPush() { const reg = await navigator.serviceWorker.ready; reg.showNotification("PepSeekr", { body: "Alerts are working. Deals on your protocol will show up here.", icon: "/icon-192.png", badge: "/icon-192.png", data: { url: "/#alerts" } }); }
+async function testPush() { const reg = await navigator.serviceWorker.ready; reg.showNotification("PepSeekr", { body: "Alerts are working. Deals on your list will show up here.", icon: "/icon-192.png", badge: "/icon-192.png", data: { url: "/#alerts" } }); }
 
 
 function reviewItem(r, withVendor) {
@@ -915,6 +920,7 @@ function route(keepScroll) {
   let h = (location.hash || "#home").slice(1);
   if (h.startsWith("s-")) h = "v-" + h.slice(2);
   if (h === "sellers") h = "vendors";
+  if (h === "list") h = "protocol";   // "My list" page; #protocol kept for old links
   if (h === "alerts" || h === "watchlist") { if (lastRoute !== "alerts" && lastRoute !== "watchlist") openedAt = seenAlerts(); }
   const y = scrollY; closeDD();
   chrome();
@@ -927,7 +933,7 @@ function route(keepScroll) {
   const pv = $("[data-pep]");
   if (pv) { drawChart(pv.dataset.pep, pv.dataset.size); document.title = `${pv.dataset.pep} prices by vendor | PepSeekr`; }
   else if (h.startsWith("v-") && V[h.slice(2)]) document.title = `${V[h.slice(2)].name}: score, prices, reviews | PepSeekr`;
-  else document.title = { vendors: "Vendors", coa: "COA library", protocol: "Shop my protocol", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] ? { vendors: "Vendors", coa: "COA library", protocol: "Shop my protocol", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] + " | PepSeekr" : "PepSeekr: the peptide price index";
+  else document.title = { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] ? { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] + " | PepSeekr" : "PepSeekr: the peptide price index";
   if (h === "vendors" || h === "seller-log") { loadLog(); if (ownerKey()) renderOwner(); }
   if (h === "watchlist") sparks();
   if (h === "alerts" || h === "watchlist") { store.set("pf_seen_alerts", ALERTS.length ? Math.max(Date.parse(ALERTS[0].at), seenAlerts()) : Date.now()); }
@@ -977,14 +983,14 @@ document.addEventListener("click", async e => {
   const as = t.closest("[data-aseg]"); if (as) { location.hash = "#" + as.dataset.aseg; return; }
   // protocol
   const im = t.closest("[data-imp]"); if (im) { if (im.tagName === "A") { if (im.dataset.imp === "paste") setTimeout(pasteSheet, 50); else setTimeout(() => $("#pdfIn")?.click(), 120); return; } e.preventDefault(); pasteSheet(); return; }
-  if (t.closest("[data-pastego]")) { const f = parseList($("#pasteTxt").value); if (!f.length) { $("#pastePrev").textContent = "We didn't recognize any compounds. Check the spelling, one per line."; return; } const n = addItems(f); closeSheet(); if (location.hash !== "#protocol") location.hash = "#protocol"; else route(); toast(`Added ${n} item${n === 1 ? "" : "s"} to your protocol`); return; }
+  if (t.closest("[data-pastego]")) { const f = parseList($("#pasteTxt").value); if (!f.length) { $("#pastePrev").textContent = "We didn't recognize any compounds. Check the spelling, one per line."; return; } const n = addItems(f); closeSheet(); if (location.hash !== "#list") location.hash = "#list"; else route(); toast(`Added ${n} item${n === 1 ? "" : "s"} to your list`); return; }
   const ai = t.closest("[data-additem]"); if (ai) { addSheet(ai.dataset.additem); return; }
   const ap = t.closest("[data-addpick]"); if (ap) { const [p, s] = ap.dataset.addpick.split("|"); if (ap.dataset.mode === "watch") { WATCH[p + "|" + s] = { target: null, on: true, drop: true, restock: true, sale: true }; saveW(); toast(`Watching ${short(p)} ${sizeTxt(s)}`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}`); } closeSheet(); route(true); return; }
   const al2 = t.closest("[data-addlist]"); if (al2) { const [p, s] = al2.dataset.addlist.split("|"); if (PROT.some(i => i.pep === p && i.size === s)) { PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)} from your list`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}. See the cheapest cart in Protocol.`); } route(true); return; }
   if (t.closest("[data-one]")) { S.one = !S.one; saveS(); route(true); return; }
   if (t.closest("[data-checklist]")) { checklistSheet(); return; }
   const ck2 = t.closest("[data-chk]"); if (ck2) { const k = ck2.dataset.chk; CHK.has(k) ? CHK.delete(k) : CHK.set(k, 1); const on = CHK.has(k); ck2.setAttribute("aria-pressed", on); ck2.textContent = (on ? "✓ " : "") + sizeTxt(k.split("|")[1]); $("#chkGo").textContent = chkLabel(); return; }
-  if (t.closest("[data-chkgo]")) { if (!CHK.size) return; PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); PROT.forEach(i => { WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; }); saveP(); store.set("pf_watch", WATCH); closeSheet(); if (location.hash !== "#protocol") location.hash = "#protocol"; else route(); return; }
+  if (t.closest("[data-chkgo]")) { if (!CHK.size) return; PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); PROT.forEach(i => { WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; }); saveP(); store.set("pf_watch", WATCH); closeSheet(); if (location.hash !== "#list") location.hash = "#list"; else route(); return; }
   const st = t.closest("[data-strat]"); if (st) { S.strat = st.dataset.strat; saveS(); route(true); return; }
   const q = t.closest("[data-qty]"); if (q) { const [p, s, d] = q.dataset.qty.split("|"); const it = PROT.find(i => i.pep === p && i.size === s); it.qty = Math.max(1, Math.min(20, it.qty + +d)); saveP(); route(true); return; }
   const rm = t.closest("[data-rm]"); if (rm) { const [p, s] = rm.dataset.rm.split("|"); PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)}`); route(true); return; }
