@@ -306,15 +306,16 @@ select.btn{appearance:none;-webkit-appearance:none;padding-right:30px;background
 .rail{display:grid;gap:16px;position:sticky;top:90px}
 .crumbs{margin-top:22px;font-size:13px;color:var(--text-3)}
 .crumbs a:hover{color:var(--brand)}
-.phead{padding:24px;display:grid;grid-template-columns:120px 1fr auto;gap:24px;align-items:center}
+.phead{padding:24px;display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:24px;align-items:center}
 .phead .vw{width:120px;height:150px}
 .phead h1{font-size:42px;line-height:1.05;letter-spacing:-.03em;font-weight:600;margin-top:4px}
 .phead .ln{margin-top:6px;color:var(--text-2)}
 .phead .bp{text-align:right}
 .pacts{display:grid;gap:8px;justify-items:end;margin-top:12px}
 .phead .bp b{display:block;font:700 34px/1.1 var(--font-mono);color:var(--data)}
-.sizes{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
-.sizes button{padding:8px 14px;border-radius:10px;border:1px solid var(--border-2);background:var(--surface);text-align:left;min-width:110px}
+.sizes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:16px}
+.sizes button{padding:8px 14px;border-radius:10px;border:1px solid var(--border-2);background:var(--surface);text-align:left;min-width:0}
+.sizes button small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sizes button b{display:block;font:700 14px var(--font-mono)}
 .sizes button small{font:500 11px var(--font-mono);color:var(--text-3)}
 .sizes button[aria-checked="true"]{background:var(--brand-a16);border-color:var(--brand-a28)}
@@ -653,3 +654,13 @@ dl.pol dt{color:var(--text-3)}
   .leg .n{width:24px;height:24px}
   .leg .rt{grid-column:2;display:flex;gap:12px;align-items:baseline;justify-content:space-between}
 }
+
+/* product page: keep the main column inside its track so the right rail never sits on top of it */
+.card:has(>.tbl),.card:has(.tbl.offers){overflow-x:auto}
+@media (min-width:768px) and (max-width:1439px){
+  .phead{grid-template-columns:120px minmax(0,1fr)}
+  .phead .bp{grid-column:2;text-align:left;display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px}
+  .phead .bp .pacts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:0}
+  .phead .bp .pacts>*{flex:none}
+}
+@media (min-width:768px){.sizes.donly{display:grid}}
