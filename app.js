@@ -64,7 +64,7 @@ const CATS = [
   // Grouped by compound family, never by intended effect.
   ["GLP & amylin analogs", 1, ["Retatrutide", "Tirzepatide", "Semaglutide", "Cagrilintide", "Survodutide", "Mazdutide", "Retatrutide + Cagrilintide"]],
   ["BPC, TB & thymic peptides", 2, ["BPC-157", "TB-500", "BPC-157 + TB-500", "GLOW (BPC/TB/GHK)", "KLOW (BPC/TB/GHK/KPV)", "BPC-157 + TB-500 + Cartalax", "Thymosin Alpha-1"]],
-  ["GH secretagogues & fragments", 3, ["CJC-1295 (no DAC)", "CJC-1295 (DAC)", "CJC-1295 + Ipamorelin", "Ipamorelin", "Tesamorelin", "Tesamorelin + Ipamorelin", "Sermorelin", "GHRP-2", "GHRP-6", "Hexarelin", "IGF-1 LR3", "IGF-1 DES", "MGF", "PEG-MGF", "MK-677", "HGH 191AA", "AOD-9604", "Fragment 176-191"]],
+  ["GH secretagogues", 3, ["CJC-1295 (no DAC)", "CJC-1295 (DAC)", "CJC-1295 + Ipamorelin", "Ipamorelin", "Tesamorelin", "Tesamorelin + Ipamorelin", "Sermorelin", "GHRP-2", "GHRP-6", "Hexarelin", "IGF-1 LR3", "IGF-1 DES", "MGF", "PEG-MGF", "MK-677", "HGH 191AA", "AOD-9604", "Fragment 176-191"]],
   ["Copper & cosmetic peptides", 4, ["GHK-Cu", "AHK-Cu", "Pal-GHK", "Snap-8", "Matrixyl", "GHK-Cu + KPV"]],
   ["Neuropeptides", 5, ["Selank", "Semax", "Semax + Selank", "DSIP", "Dihexa", "P21", "Adamax", "Cerebrolysin", "PE-22-28", "Pinealon", "Oxytocin"]],
   ["Bioregulators", 6, ["Epitalon", "Thymalin", "Thymagen", "Thymogen", "Cartalax", "Cardiogen", "Crystagen", "Testagen", "Prostamax", "Vesugen", "Vesilut", "Pancragen", "Bronchogen", "Ovagen", "Cortagen", "Livagen", "Chonluten"]],
@@ -311,7 +311,7 @@ function ctaBand() {
 
 /* ---------- home ---------- */
 function vHome() {
-  const vs = vendors(), g = groupBy(live()), deals = dealsList(6), top = deals[0];
+  const vs = vendors(), g = groupBy(live()), deals = dealsList(6), top = deals.find(d => d.b.coa === true && d.b.coaState !== "reused");   // featured card only shows a listing with a COA on file
   const recent = ALERTS.filter(a => a.kind !== "promo" && !HIDE.has(a.v) && Date.now() - Date.parse(a.at) < 7 * 864e5);
   const mine = recent.filter(relevant), sa = [...mine, ...recent.filter(a => !mine.includes(a))].slice(0, 8);
   const c = catCounts();

@@ -224,7 +224,8 @@ select.btn{appearance:none;-webkit-appearance:none;padding-right:30px;background
 .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:16px}
 .ctile{--h:var(--cat-1);border-radius:var(--r-lg);padding:12px 14px;display:flex;align-items:center;gap:12px;background:color-mix(in srgb,var(--h) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--h) 36%,transparent);transition:transform .2s,box-shadow .2s}
 .ctile:hover{transform:translateY(-2px);box-shadow:var(--glow)}
-.ctile b{display:block;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctile{min-width:0}
+.ctile b{display:block;font-weight:600;font-size:13.5px;line-height:1.25}
 .ctile>span>span{font:400 11.5px var(--font-mono);color:var(--text-3)}
 .ctile .vw{width:36px;height:48px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--h) 18%,transparent);flex:none}
 
