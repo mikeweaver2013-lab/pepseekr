@@ -83,7 +83,7 @@ const TAGS_NEG = ["Slow shipping", "Order problem", "Hard to reach"];
 const STARWORD = ["", "Bad", "Not great", "Okay", "Good", "Great"];
 
 /* ---------- state ---------- */
-let D = null, V = {}, ROWS = [], ALERTS = [], RV = { stats: {}, recent: [] }, PEPS = [];
+let FR_MID = 3.9, D = null, V = {}, ROWS = [], ALERTS = [], RV = { stats: {}, recent: [] }, PEPS = [];
 const S = Object.assign({ q: "", cat: "All", sort: "ppu", rep: false, stock: true, coa: false, ship: false, vendor: "", strat: "rec", one: false, swaps: true, open: null }, store.get("pf_filters", {}), { q: "", cat: "All", vendor: "" });
 const saveS = () => store.set("pf_filters", { sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, strat: S.strat, one: S.one, swaps: S.swaps });
 let HIDE = new Set(store.get("pf_hidden", []));
@@ -123,6 +123,8 @@ function score() {
     const m = med(list.map(r => r.price)); list.forEach(r => { r.med = m; r.vsMed = r.price / m; (idx[r.v] ??= []).push(r.price / m); });
     const pool = list.filter(r => r.stock); if (pool.length > 1) { const b = pool.reduce((a, c) => c.price < a.price ? c : a); wins[b.v] = (wins[b.v] || 0) + 1; }
   });
+  const frs = Object.values(V).map(v => v.finnrick_pct).filter(x => x != null);
+  FR_MID = frs.length ? 1 + 4 * med(frs) / 100 : 3.9;
   Object.values(V).forEach(v => {
     const rel = idx[v.id]?.length ? med(idx[v.id]) : 1; v.priceIdx = rel; v.wins = wins[v.id] || 0;
     const mine = ROWS.filter(r => r.v === v.id); v.count = mine.length;
@@ -132,7 +134,12 @@ function score() {
     v.coaPct = known.length ? Math.round(known.reduce((a, r) => a + credit(r), 0) / known.length * 100) : 0;
     v.coaReused = mine.filter(r => r.coaState === "reused").length;
     // Rating: outside reputation as a prior (weight 8) blended with verified PepSeekr reviews (weight 1 each).
-    const tp = +v.rep_trustpilot || 0, prior = tp ? Math.min(tp, PRIOR[v.tier] + .4) : PRIOR[v.tier];
+    // Outside signal: Finnrick's independent lab-test rating (share of acceptable tests) on a 1-5 scale.
+    // Trustpilot removed the peptide stores in 2026, so it no longer counts.
+    // Stores Finnrick hasn't tested start at the middle of the tested stores, so being tested is never a penalty
+    // in itself: above-median results raise the start point, below-median results lower it.
+    const fr = v.finnrick_pct != null ? 1 + 4 * v.finnrick_pct / 100 : FR_MID;
+    const prior = v.tier === "mixed" ? Math.min(fr, PRIOR.mixed) : fr;
     const st = RV.stats[v.id]; v.rvN = st ? +st.n : 0; v.rvAvg = st ? +st.avg : null;
     v.rating = v.rvN ? (prior * 8 + v.rvAvg * v.rvN) / (8 + v.rvN) : prior;
     const rep = Math.max(0, Math.min(40, (v.rating - 3) / 2 * 40));
@@ -160,6 +167,7 @@ function vBadge(v) {
   if (v.tier === "mixed") return `<span class="pill p-warn">Mixed</span>`;
   if (v.rank === 1 && v.rating >= 4.4 && (v.rvN || v.rep_trustpilot)) return `<span class="pill p-brand">Top rated</span>`;
   if (v.rating >= 4.2 && (v.rvN || v.rep_trustpilot)) return `<span class="pill p-brand">Well reviewed</span>`;
+  if (!v.rvN && v.finnrick_pct != null) return `<span class="pill ${v.finnrick_pct >= 75 ? "p-brand" : v.finnrick_pct >= 60 ? "p-n" : "p-warn"}" title="${esc(frTitle(v))}">Lab-tested ${v.finnrick_pct}%</span>`;
   if (!v.rvN && !v.rep_trustpilot) return `<span class="pill p-n" title="No reviews from verified buyers yet">No reviews yet</span>`;
   return "";
 }
@@ -168,6 +176,8 @@ function ring(s, size = 54) {
   const r = (size - 5) / 2, c = 2 * Math.PI * r;
   return `<span class="ring" style="width:${size}px;height:${size}px;--rc:${ringC(s)}" role="img" aria-label="Score ${s} of 100"><svg viewBox="0 0 ${size} ${size}"><circle class="tr" cx="${size / 2}" cy="${size / 2}" r="${r}"/><circle class="fg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - s / 100)}"/></svg><b style="font-size:${size > 60 ? 20 : size < 46 ? 13 : 15}px">${s}</b></span>`;
 }
+const frTitle = v => `Finnrick independent testing: ${v.finnrick_pct}% rating${v.finnrick_rank ? `, #${v.finnrick_rank} of ${v.finnrick_of} vendors` : ""}${v.finnrick_tests ? `, ${v.finnrick_tests} samples` : ""}`;
+const frUrl = v => v.finnrick_slug ? `https://www.finnrick.com/vendors/all/${encodeURIComponent(v.finnrick_slug)}` : "";
 const siteRev = v => v.site_reviews > 0 && v.site_rating != null ? `★ ${(+v.site_rating).toFixed(1)} (${v.site_reviews}) on site` : "";
 const repTxt = v => v.rvN ? `★ ${v.rvAvg.toFixed(1)} (${v.rvN})` : v.rep_trustpilot ? `★ ${(+v.rep_trustpilot).toFixed(1)} TP` : siteRev(v) || "No reviews";
 // "Their reviews ↗": the store's own reviews page, when it has one. Never use inside a card that is itself a link.
@@ -281,7 +291,7 @@ function dealCard(d, glow) {
 }
 function vendorCard(v, glow) {
   return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div><span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
-    <div class="trip"><div><span class="lbl">Reviews</span><b>${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : v.site_reviews > 0 && v.site_rating != null ? "★ " + (+v.site_rating).toFixed(1) : "—"}</b><span class="hint">${v.rvN ? v.rvN + " verified" : v.rep_trustpilot ? "Trustpilot" : v.site_reviews > 0 && v.site_rating != null ? v.site_reviews + " on their site" : "none yet"}</span></div><div><span class="lbl">COA on file</span><b>${coaPctTxt(v)}</b></div><div><span class="lbl">vs market</span>${(d => `<b class="${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</b>`)(Math.round((v.priceIdx - 1) * 100))}</div></div>
+    <div class="trip"><div><span class="lbl">Rating</span><b>${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : v.site_reviews > 0 && v.site_rating != null ? "★ " + (+v.site_rating).toFixed(1) : "—"}</b><span class="hint">${v.rvN ? v.rvN + " verified" : v.finnrick_pct != null ? "Finnrick lab tests" : v.site_reviews > 0 && v.site_rating != null ? v.site_reviews + " on their site" : "none yet"}</span></div><div><span class="lbl">COA on file</span><b>${coaPctTxt(v)}</b></div><div><span class="lbl">vs market</span>${(d => `<b class="${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</b>`)(Math.round((v.priceIdx - 1) * 100))}</div></div>
     <div class="cbar" title="COA coverage ${v.coaPct}%"><i style="width:${v.coaPct}%"></i></div>
     <div class="vfoot"><span>${I.truck.replace("<svg", '<svg style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px"')}${esc(shipText(v))}</span><span class="mono">${v.count} listings</span></div>${v.promo_text ? `<div>${promoPill(v)}</div>` : ""}</a>`;
 }
@@ -398,7 +408,7 @@ function offerRow(r, best) {
   const v = V[r.v];
   return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
     <td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.sale ? ` <span class="pill p-sale">Sale</span>` : ""}${S.ship && shipCost(v, r.price) ? `<div class="hint">${money2(eff(r))} shipped</div>` : ""}</td>
-    <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r, true) || `<span class="t3" title="Not checked yet">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}${v.site_reviews_url ? `<div>${theirRev(v)}</div>` : ""}</td><td class="wrap-c">${esc(shipText(v))}</td>
+    <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r, true) || `<span class="t3" title="Not checked yet">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}${v.finnrick_pct != null ? `<div><a class="link" href="${esc(frUrl(v))}" target="_blank" rel="noopener" title="${esc(frTitle(v))}" style="font-size:12.5px">Lab-tested ${v.finnrick_pct}% ↗</a></div>` : ""}${v.site_reviews_url ? `<div>${theirRev(v)}</div>` : ""}</td><td class="wrap-c">${esc(shipText(v))}</td>
     <td style="text-align:right"><a class="btn sm ${best ? "p" : ""}" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${r.stock ? "Buy" : "View"} ${I.ext}</a></td></tr>`;
 }
 function offerCard(r, best) {
@@ -438,7 +448,7 @@ function vVendor(id) {
   const bk = [["Reviews", v.pts.rep, 40], ["Price", v.pts.price, 30], ["COA", v.pts.coa, 20], ["Shipping", v.pts.ship, 10]];
   return `<section class="vhero"><div class="gridbg"></div><div class="wrap in"><span class="mono-tile">${esc(v.name[0])}</span><div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>
       <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
-      <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.rep_trustpilot ? (+v.rep_trustpilot).toFixed(1) : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Trustpilot"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
+      <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Finnrick tests"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
     <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
   <div class="wrap"><div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
     ${v.promo_text ? `<div class="promo" style="margin:0"><b>${esc(v.promo_text)}</b><div class="hint" style="margin-top:2px">${esc(v.promo_detail || "")}${v.promo_ends ? " Ends " + new Date(v.promo_ends).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + "." : ""} Prices on PepSeekr are before this discount.</div></div>` : ""}
@@ -449,7 +459,7 @@ function vVendor(id) {
       <div class="row" style="margin:12px 0 4px;gap:8px">${[["recent", "Most recent"], ["5", "5★"], ["ship", "Shipping"], ["coa", "COA match"]].map(([k, t]) => `<button class="chip" type="button" data-vrf="${k}" aria-pressed="${vrf === k}">${t}</button>`).join("")}</div>
       ${v.rvN ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${v.rvAvg.toFixed(1)}</b><div>${stars(v.rvAvg)}<div class="hint">${v.rvN} verified</div></div></div><div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(dist[i] / tot * 100)}%"></b></i><span>${dist[i]}</span></div>`).join("")}</div>` : ""}
       ${rv.map(r => reviewItem(r)).join("") || `<div class="empty"><span class="ei">${I.shield}</span><b>${v.rvN ? "No reviews match that filter" : "No verified reviews yet"}</b><p>Bought from ${esc(v.name)}? A photo of your receipt keeps every review real.</p></div>`}
-      <p class="hint" style="margin-top:12px">Every review comes from a buyer who sent a receipt or order confirmation. We check it, then delete it.${v.rep_trustpilot ? ` Elsewhere: ${(+v.rep_trustpilot).toFixed(1)} on Trustpilot${v.rep_reviews ? ` from ${v.rep_reviews}+ reviews` : ""}.` : ""}${v.site_reviews > 0 && v.site_rating != null ? ` On their own site: ${(+v.site_rating).toFixed(1)} from ${v.site_reviews} review${v.site_reviews > 1 ? "s" : ""}. The store runs those, so we show them but don't count them in the score.` : ""} ${theirRev(v, "See their reviews")}</p></div>
+      <p class="hint" style="margin-top:12px">Every review comes from a buyer who sent a receipt or order confirmation. We check it, then delete it.${v.finnrick_pct != null ? ` Independent lab testing: <a class="link" href="${esc(frUrl(v))}" target="_blank" rel="noopener">${esc(frTitle(v))} ↗</a>.` : ""}${v.site_reviews > 0 && v.site_rating != null ? ` On their own site: ${(+v.site_rating).toFixed(1)} from ${v.site_reviews} review${v.site_reviews > 1 ? "s" : ""}. The store runs those, so we show them but don't count them in the score.` : ""} ${theirRev(v, "See their reviews")}</p></div>
   </div><aside class="rail">
     <div class="card panel"><div class="bar"><h3>Score breakdown</h3>${ring(v.score, 44)}</div><div class="bk">${bk.map(([t, p, m]) => `<div><div class="r"><span>${t}</span><b>${p} / ${m}</b></div><div class="cbar"><i style="width:${p / m * 100}%"></i></div></div>`).join("")}</div></div>
     <div class="card panel"><div class="bar"><h3>COA library</h3><span class="mono t3" style="font-size:12px">${coaRows.length} listed</span></div><p class="hint" style="margin-top:4px">Lab reports are hosted on ${esc(poss(v.name))} site.</p><div class="coal" style="margin-top:8px">${coaRows.slice(0, 8).map(r => `<a href="${esc(r.coaUrl || r.url || v.url)}" target="_blank" rel="noopener"><span><b style="font-weight:600">${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></span><span class="coa">${r.lot ? "Lot " + esc(r.lot) : "COA"} ↗</span></a>`).join("") || `<p class="hint">No COAs found on ${esc(poss(v.name))} product pages.</p>`}</div></div>
