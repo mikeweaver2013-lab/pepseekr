@@ -158,7 +158,10 @@ const unitTxt = u => u === "iu" ? "IU" : u;
 const shipCost = (v, sub) => v.ship_flat == null ? 0 : (v.free_ship_over != null && sub >= +v.free_ship_over ? 0 : +v.ship_flat);
 const eff = r => r.price + (S.ship ? shipCost(V[r.v], r.price) : 0);
 const live = () => ROWS.filter(r => !HIDE.has(r.v));
-const vis = (rows = live()) => rows.filter(r => (!S.rep || V[r.v].rating >= 4) && (!S.stock || r.stock) && (!S.coa || (r.coa === true && r.coaState !== "reused")) && (!S.vendor || r.v === S.vendor));
+// "Hide low-rated stores": flagged stores, Finnrick results under 60%, or 5+ buyer reviews averaging under 3.5.
+// Stores with no ratings at all stay in: having no data isn't a strike.
+const lowRated = v => v.tier === "mixed" || (v.finnrick_pct != null && v.finnrick_pct < 60) || (v.rvN >= 5 && v.rvAvg < 3.5);
+const vis = (rows = live()) => rows.filter(r => (!S.rep || !lowRated(V[r.v])) && (!S.stock || r.stock) && (!S.coa || (r.coa === true && r.coaState !== "reused")) && (!S.vendor || r.v === S.vendor));
 const bestOf = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) / c.sv < eff(a) / a.sv ? c : a) : null; };
 const bestPrice = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) < eff(a) ? c : a) : null; };
 const groupBy = rows => { const g = {}; rows.forEach(r => ((g[r.pep] ??= {})[r.size] ??= []).push(r)); return g; };
@@ -322,7 +325,7 @@ function catalog(limit) {
 }
 const ck = (k, t) => `<button type="button" class="ck" role="checkbox" aria-checked="${!!S[k]}" data-filt="${k}"><span class="chk">${I.check}</span>${t}</button>`;
 function filtersBar() {
-  return `<div class="card filters"><span class="lbl">Filters</span>${ck("rep", "Good reputation only")}${ck("stock", "In stock only")}${ck("coa", "COA on file")}${ck("ship", "Include shipping")}
+  return `<div class="card filters"><span class="lbl">Filters</span>${ck("rep", "Hide low-rated stores")}${ck("stock", "In stock only")}${ck("coa", "COA on file")}${ck("ship", "Include shipping")}
     <div class="r"><select class="btn sm" id="vsel" aria-label="Vendor"><option value="">All vendors</option>${vendors().map(v => `<option value="${esc(v.id)}" ${S.vendor === v.id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select><button class="btn sm" type="button" data-stores>${I.store} Stores</button></div></div>`;
 }
 function ctaBand() {
@@ -391,7 +394,7 @@ function vProduct(slug) {
         <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price</span><b>${money2(b.price)}</b><span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs average" : "at average"}</span><div class="pacts">${b.stock ? `<a class="btn p lg" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy at ${esc(V[b.v].name)} ${I.ext}</a>` : `<span class="pill p-n">Out of stock everywhere</span>`}<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch"}</button><button class="btn sm" type="button" data-addlist="${esc(p)}|${esc(size)}">${PROT.some(i => i.pep === p && i.size === size) ? I.check + " On my list" : I.plus + " Add to list"}</button></div><span class="ruo" style="text-align:right">Research use only</span></div></div></div>
       <div class="sizes monly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money(lb.price) : "out"}</small></button>`; }).join("")}</div>
       ${b.v && V[b.v].promo_text ? `<div class="promo"><b><a href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener" style="text-decoration:underline">${esc(V[b.v].name)} ↗</a>: ${esc(V[b.v].promo_text)}</b><div class="hint" style="margin-top:2px">${esc((V[b.v].promo_detail || "").replace(/\.?$/, ". ").replace(/^\. $/, ""))}Prices shown are before this discount.</div></div>` : ""}
-      <div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>
+      <div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("rep", "Hide low-rated")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>${list.length < raw.length ? `<div class="note t2" style="margin:0;padding:10px 16px;border-bottom:1px solid var(--border)">Showing ${list.length} of ${raw.length} offers. Filters on: ${[S.stock && "in stock only", S.coa && "COA on file", S.rep && "hide low-rated", S.vendor && "one store"].filter(Boolean).join(", ")}. <button class="link" type="button" data-showall>Show all ${raw.length}</button></div>` : ""}
         ${list.length ? `<table class="tbl offers"><thead><tr><th>Vendor</th><th>Price</th><th>$/${unitTxt(b.unit)}</th><th>COA</th><th>Rating</th><th>Shipping</th><th></th></tr></thead><tbody>${list.map(r => offerRow(r, multi && r === b)).join("")}</tbody></table>
         <ul class="ocards monly" style="padding:12px">${list.map(r => offerCard(r, multi && r === b)).join("")}</ul>` : `<div class="empty"><b>No offers match your filters</b><p>Turn off “In stock only” or “COA on file” to see every vendor.</p><button class="btn" type="button" data-clearf>Clear filters</button></div>`}</div>
       <div class="card panel"><div class="bar"><div><span class="lbl">Price history · 90 days</span><h3 style="margin-top:4px">Lowest ${esc(sizeTxt(size))} offer</h3></div><span class="mono t3" id="chsum" style="font-size:12px"></span></div><div class="chart" id="chart" style="margin-top:12px"><div class="hint">Loading…</div></div></div>
@@ -733,7 +736,7 @@ function filterSheet() {
   const c = catCounts(), n = vis().length;
   const sw = (k, t, s) => `<button type="button" class="srow" role="switch" aria-checked="${!!S[k]}" data-filt="${k}"><span><b style="font-weight:600">${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`;
   openSheet(`<div class="shd"><h2>Filters</h2><div class="row" style="gap:4px"><button class="link" type="button" data-clearf style="min-height:44px;padding:0 8px">Reset</button><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div></div>
-    <div class="ssec"><span class="lbl">Quality</span>${sw("rep", "Good reputation only", "Vendors rated 4★ and up")}${sw("stock", "In stock only", "Hide sold-out listings")}${sw("coa", "COA on file", "Lab report linked on the listing")}${sw("ship", "Include shipping", "Add known flat shipping to prices")}</div>
+    <div class="ssec"><span class="lbl">Quality</span>${sw("rep", "Hide low-rated stores", "Flagged stores, lab tests under 60%, or poor buyer reviews")}${sw("stock", "In stock only", "Hide sold-out listings")}${sw("coa", "COA on file", "Lab report linked on the listing")}${sw("ship", "Include shipping", "Add known flat shipping to prices")}</div>
     <div class="ssec"><span class="lbl">Category</span><div class="wrapchips">${["All", ...ALLCATS].filter(k => k === "All" || c[k]).map(k => `<button class="chip" type="button" data-cat="${esc(k)}" aria-pressed="${S.cat === k}">${esc(k)}</button>`).join("")}</div></div>
     <div class="ssec"><span class="lbl">Sort by</span><div class="seg" role="radiogroup" aria-label="Sort">${[["ppu", "$/mg"], ["score", "Score"], ["rating", "Rating"]].map(([k, t]) => `<button type="button" role="radio" data-sortopt="${k}" aria-checked="${S.sort === k}">${t}</button>`).join("")}</div></div>
     <div class="ssec"><span class="lbl">Vendors</span><button type="button" class="srow" data-stores><span><b style="font-weight:600">Stores</b><small>${HIDE.size ? HIDE.size + " hidden" : "Following all " + Object.keys(V).length}</small></span>${I.chev.replace("<svg", '<svg style="width:18px;height:18px"')}</button></div>
@@ -1137,6 +1140,7 @@ document.addEventListener("click", async e => {
   const bd = t.closest("[data-board]"); if (bd) { boardSheet(bd.dataset.board); return; }
   if (t.closest("[data-boardgo]")) { boardGo(); return; }
   if (t.closest("[data-boardopen]")) { boardOpen(); return; }
+  if (t.closest("[data-showall]")) { S.stock = false; S.coa = false; S.rep = false; S.vendor = ""; saveS(); route(true); return; }
   const st = t.closest("[data-strat]"); if (st) { S.tab = st.dataset.strat; S.open = null; route(true); return; }
   if (t.closest("[data-swaps]")) { S.swaps = S.swaps === false; S.open = null; saveS(); route(true); return; }
   const it = t.closest("[data-itin]"); if (it) { const [k, m] = it.dataset.itin.split("|"); const cur = document.querySelector(".itin[aria-expanded=true] [data-itin]"); if (cur === it) return; S.open = k; S.openMode = m; route(true); return; }

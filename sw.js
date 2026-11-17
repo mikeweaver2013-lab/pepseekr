@@ -1,5 +1,5 @@
 /* PepSeekr service worker: app-shell cache, network-first data, web push. */
-const SHELL = "pf-shell-v18";
+const SHELL = "pf-shell-v19";
 const ASSETS = ["/", "/index.html", "/app.js", "/styles.css", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/favicon.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
