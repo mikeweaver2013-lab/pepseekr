@@ -529,13 +529,17 @@ function* subsets(arr, k, start = 0, pre = []) { if (pre.length) yield pre; if (
 function buildRoutes(mode, swaps, maxStores) {
   const items = PROT.map(i => ({ ...i, offers: itemOffers(i, mode, swaps), all: live().filter(r => r.pep === i.pep && r.size === i.size) }));
   const buyable = items.filter(x => x.offers.length);
-  const vids = [...new Set(buyable.flatMap(x => x.offers.map(o => o.v)))];
+  // Keep the search fast as the store list grows: consider the 10 stores that carry the most of the list
+  // (ties go to the one cheapest on those items), plus any store that is the cheapest for some item.
+  const allV = [...new Set(buyable.flatMap(x => x.offers.map(o => o.v)))];
+  const rank = v => { const os = buyable.map(x => x.offers.find(o => o.v === v)).filter(Boolean); return [os.length, -os.reduce((a, o) => a + o.price, 0)]; };
+  const top = allV.sort((a, b) => { const [ca, pa] = rank(a), [cb, pb] = rank(b); return cb - ca || pb - pa; }).slice(0, 10);
+  const vids = [...new Set([...top, ...buyable.map(x => x.offers[0].v)])];
   const seen = new Map();
   for (const set of subsets(vids, Math.min(maxStores, vids.length))) {
     const assign = [], missing = [];
     for (const it of buyable) { const o = it.offers.find(o => set.includes(o.v)); if (o) assign.push({ item: it, offer: o }); else missing.push(it); }
     if (!assign.length) continue;
-    if (missing.length && set.length > 1) continue; // only single stores may come up short
     const used = [...new Set(assign.map(a => a.offer.v))].sort();
     const key = used.join("+"); if (seen.has(key)) continue;
     const p = priceStores(assign); Object.assign(p, { key, assign, missing, n: used.length, mode });
@@ -549,20 +553,23 @@ const stopsTxt = n => n <= 1 ? "Nonstop" : `${n - 1} stop${n > 2 ? "s" : ""}`;
 function routePlan() {
   const swaps = S.swaps !== false, one = !!S.one, max = one ? 1 : 5;
   const C = buildRoutes("cheapest", swaps, max), VAL = buildRoutes("value", swaps, max);
-  const full = C.routes.filter(r => !r.missing.length).sort((a, b) => a.total - b.total);
-  const byCover = (a, b) => a.missing.length - b.missing.length || a.total - b.total;
-  const pool = full.length ? full : [...C.routes].sort(byCover);
+  // Only routes that cover as many items as possible are eligible for the named picks, so a route
+  // that skips something another route covers is never "Recommended".
+  const best = list => { const m = Math.max(0, ...list.map(r => r.assign.length)); return list.filter(r => r.assign.length === m).sort((a, b) => a.total - b.total); };
+  const pool = best(C.routes);
   const low = pool[0] || null;
-  const few = [...pool].sort((a, b) => a.n - b.n || byCover(a, b))[0] || null;
+  const few = [...pool].sort((a, b) => a.n - b.n || a.total - b.total)[0] || null;
   const tol = low ? Math.max(10, low.total * 0.05) : 0;
-  const rec = low ? [...pool].filter(r => r.total <= low.total + tol).sort((a, b) => a.n - b.n || byCover(a, b))[0] : null;
-  const vfull = VAL.routes.filter(r => !r.missing.length).sort((a, b) => a.total - b.total);
-  const val = (vfull.length ? vfull : [...VAL.routes].sort(byCover))[0] || null;
-  const nonstops = C.routes.filter(r => r.n === 1).sort(byCover);
-  return { C, low, few, rec, val, nonstops, tol, swaps, one };
+  const rec = low ? pool.filter(r => r.total <= low.total + tol).sort((a, b) => a.n - b.n || a.total - b.total)[0] : null;
+  const vpool = best(VAL.routes), val = vpool[0] || null;
+  const nonstops = C.routes.filter(r => r.n === 1).sort((a, b) => b.assign.length - a.assign.length || a.total - b.total);
+  // one-seller mode: what splitting would get you, so the shopper can see the trade
+  let multi = null;
+  if (one) { const mp = best(buildRoutes("cheapest", swaps, 5).routes), ml = mp[0]; if (ml) { const mt = Math.max(10, ml.total * 0.05); multi = mp.filter(r => r.total <= ml.total + mt).sort((a, b) => a.n - b.n || a.total - b.total)[0]; } }
+  return { C, low, few, rec, val, nonstops, tol, swaps, one, multi };
 }
 function vProtocol() {
-  const R = routePlan(), tab = ["rec", "low", "few", "value"].includes(S.strat) ? S.strat : "rec";
+  const R = routePlan(), tab = ["rec", "low", "few", "value"].includes(S.tab) ? S.tab : "rec";
   const pick = { rec: R.rec, low: R.low, few: R.few, value: R.val };
   const sel = (S.open && [R.rec, R.low, R.few, R.val, ...R.nonstops].find(r => r && r.key === S.open && r.mode === (S.openMode || "cheapest"))) || pick[tab];
   const nItems = PROT.length - R.C.unavail.length;
@@ -589,7 +596,7 @@ function vProtocol() {
     return `<div class="card itin" aria-expanded="${open}">
       <button type="button" class="itin-hd" data-itin="${esc(r.key)}|${r.mode}" aria-expanded="${open}">
         <div class="stops">${stopsTxt(r.n)}<small>${r.n} checkout${r.n > 1 ? "s" : ""}</small></div>
-        <div style="min-width:0"><div class="path">${nv.map((v, i) => `${i ? `<span class="hop"></span>` : ""}<span class="node"><span class="av">${esc(V[v].name[0])}</span>${esc(V[v].name.replace(/ Peptides?$/i, ""))}</span>`).join("")}</div>
+        <div style="min-width:0"><div class="path">${nv.map((v, i) => `${i ? `<span class="hop"></span>` : ""}<span class="node"><span class="av">${esc(V[v].name.slice(0, 2))}</span>${esc(V[v].name.replace(/ Peptides?$/i, ""))}</span>`).join("")}</div>
           <div class="sub">${t.map((x, i) => `<span class="pill ${i ? "p-brand" : x === "Recommended" ? "p-best" : "p-brand"}">${x}</span>`).join("")}<span>${r.assign.length} of ${nItems} items</span>${r.swaps.length ? `<span class="swap-pill">⇄ ${r.swaps.length} size swap${r.swaps.length > 1 ? "s" : ""}</span>` : ""}${why(r) ? `<span>${why(r)}</span>` : ""}</div></div>
         <div class="rt"><b>${money2(r.total)}</b>${open ? `<span class="hint">saves ${money2(Math.max(0, r.save))} vs average</span>` : `<span class="mono ${d > 0 ? "t3" : "data"}" style="font-size:13px">${d > 0 ? "+" : d < 0 ? "−" : ""}${money2(Math.abs(d))}</span>`}</div>
       </button>
@@ -599,12 +606,19 @@ function vProtocol() {
   const itemRow = x => `<div class="item"><span class="vwell vw">${vial(x.pep, x.size, 58)}</span><div style="min-width:0"><div><a class="nm" href="#p-${slugOf(x.pep)}">${esc(short(x.pep))}</a> <span class="mono t3" style="font-size:12.5px">${esc(sizeTxt(x.size))}</span><span class="qty" aria-label="Quantity"><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|-1" aria-label="One fewer">−</button><span>${x.qty}</span><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|1" aria-label="One more">+</button></span></div>
       <div class="hint" style="margin-top:3px">${x.offers.length ? `${x.offers.length} store${x.offers.length > 1 ? "s" : ""} in stock · from ${money2(x.offers[0].price)}` : `<span class="warn">No vendor has this in stock</span>`}</div>
       <div class="row" style="gap:12px;margin-top:4px"><button class="link" type="button" data-swap="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px">${x.all.length > 1 ? x.all.length + " offers ▾" : "Change size"}</button><button class="link" type="button" data-rm="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px;color:var(--text-3)">Remove</button></div></div></div>`;
+  const coverNote = () => {
+    const have = R.rec ? R.rec.assign.length : 0, missing = R.rec ? R.rec.missing.filter(m => !R.C.unavail.includes(m)) : [];
+    if (R.one && R.multi && R.multi.assign.length > have) return `<div class="note warn" style="margin-top:12px">No single store has all ${nItems} items. The best one covers ${have}. Turn off <b>one seller</b> to get all ${R.multi.assign.length} from ${R.multi.n} stores for ${money2(R.multi.total)}.</div>`;
+    if (!R.one && missing.length) return `<div class="note warn" style="margin-top:12px">No mix of up to 5 stores has everything. Buy ${missing.map(m => esc(short(m.pep)) + " " + esc(sizeTxt(m.size))).join(" and ")} separately.</div>`;
+    return "";
+  };
   const tabs = [["rec", "Recommended", R.rec], ["low", "Lowest price", R.low], ["few", "Fewest stops", R.few], ["value", "Best value", R.val]];
   const ctl = `<div class="rtabs" role="radiogroup" aria-label="Route">${tabs.map(([k, t, r]) => `<button class="chip" type="button" role="radio" data-strat="${k}" aria-checked="${tab === k && !S.open}" aria-pressed="${tab === k && !S.open}">${t}${r ? ` <span class="mono">${money2(r.total)}</span>` : ""}</button>`).join("")}</div>
     <div class="row" style="gap:16px;margin-top:10px"><button type="button" class="ck" role="checkbox" aria-checked="${R.swaps}" data-swaps><span class="chk">${I.check}</span>Allow size swaps</button><button type="button" class="ck" role="checkbox" aria-checked="${R.one}" data-one><span class="chk">${I.check}</span>Buy everything from one seller</button></div>`;
   return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">My list</span></span><h1 class="h1" style="margin-top:12px">Your list, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors, shipping included.` : "Check off what you need. We find the cheapest way to buy it, shipping included, from one store or several."}</p></div></div>
     <div class="imp"><button class="card itile" type="button" data-checklist><span class="hd">${I.list} Check off a list</span><span class="hint">Pick everything you need</span></button><button class="card itile" type="button" data-imp="paste"><span class="hd">${I.paste} Paste a list</span><span class="hint">Type or paste names</span></button><label class="card itile"><span class="hd">${I.file} PDF</span><span class="hint">Drop a file</span><input type="file" id="pdfIn" accept="application/pdf" aria-label="Import a PDF"></label></div>
     ${PROT.length && sel ? `<div style="margin-top:16px">${ctl}</div>
+    ${coverNote()}
     <div class="itins" style="margin-top:14px">${list.map(card).join("")}</div>
     ${R.C.unavail.length ? `<p class="hint warn" style="margin-top:10px">Not in stock anywhere right now: ${R.C.unavail.map(m => esc(short(m.pep)) + " " + esc(sizeTxt(m.size))).join(", ")}. Add it to your watchlist to hear when it's back.</p>` : ""}
     <div class="card" style="margin-top:16px"><div class="phd"><span class="lbl">Your list · ${PROT.length}</span><button class="link" type="button" data-checklist>+ Add items</button></div><div class="items">${R.C.items.map(itemRow).join("")}</div></div>` :
@@ -1105,7 +1119,7 @@ document.addEventListener("click", async e => {
   const bd = t.closest("[data-board]"); if (bd) { boardSheet(bd.dataset.board); return; }
   if (t.closest("[data-boardgo]")) { boardGo(); return; }
   if (t.closest("[data-boardopen]")) { boardOpen(); return; }
-  const st = t.closest("[data-strat]"); if (st) { S.strat = st.dataset.strat; S.open = null; saveS(); route(true); return; }
+  const st = t.closest("[data-strat]"); if (st) { S.tab = st.dataset.strat; S.open = null; route(true); return; }
   if (t.closest("[data-swaps]")) { S.swaps = S.swaps === false; S.open = null; saveS(); route(true); return; }
   const it = t.closest("[data-itin]"); if (it) { const [k, m] = it.dataset.itin.split("|"); const cur = document.querySelector(".itin[aria-expanded=true] [data-itin]"); if (cur === it) return; S.open = k; S.openMode = m; route(true); return; }
   const q = t.closest("[data-qty]"); if (q) { const [p, s, d] = q.dataset.qty.split("|"); const it = PROT.find(i => i.pep === p && i.size === s); it.qty = Math.max(1, Math.min(20, it.qty + +d)); saveP(); route(true); return; }
