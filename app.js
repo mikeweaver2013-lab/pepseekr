@@ -64,12 +64,13 @@ const CATS = [
   // Grouped by compound family, never by intended effect.
   ["GLP & amylin analogs", 1, ["Retatrutide", "Tirzepatide", "Semaglutide", "Cagrilintide", "Survodutide", "Mazdutide", "Retatrutide + Cagrilintide"]],
   ["BPC, TB & thymic peptides", 2, ["BPC-157", "TB-500", "BPC-157 + TB-500", "GLOW (BPC/TB/GHK)", "KLOW (BPC/TB/GHK/KPV)", "BPC-157 + TB-500 + Cartalax", "Thymosin Alpha-1"]],
-  ["GH secretagogues", 3, ["CJC-1295 (no DAC)", "CJC-1295 (DAC)", "CJC-1295 + Ipamorelin", "Ipamorelin", "Tesamorelin", "Tesamorelin + Ipamorelin", "Sermorelin", "GHRP-2", "GHRP-6", "Hexarelin", "IGF-1 LR3", "IGF-1 DES", "MGF", "PEG-MGF", "MK-677", "HGH 191AA", "AOD-9604", "Fragment 176-191"]],
+  ["GH secretagogues", 3, ["CJC-1295 (no DAC)", "CJC-1295 (DAC)", "CJC-1295 + Ipamorelin", "Ipamorelin", "Tesamorelin", "Tesamorelin + Ipamorelin", "Sermorelin", "GHRP-2", "GHRP-6", "Hexarelin", "MK-677", "HGH 191AA", "AOD-9604", "Fragment 176-191"]],
   ["Copper & cosmetic peptides", 4, ["GHK-Cu", "AHK-Cu", "Pal-GHK", "Snap-8", "Matrixyl", "GHK-Cu + KPV"]],
   ["Neuropeptides", 5, ["Selank", "Semax", "Semax + Selank", "DSIP", "Dihexa", "P21", "Adamax", "Cerebrolysin", "PE-22-28", "Pinealon", "Oxytocin"]],
   ["Bioregulators", 6, ["Epitalon", "Thymalin", "Thymagen", "Thymogen", "Cartalax", "Cardiogen", "Crystagen", "Testagen", "Prostamax", "Vesugen", "Vesilut", "Pancragen", "Bronchogen", "Ovagen", "Cortagen", "Livagen", "Chonluten"]],
   ["Mitochondrial peptides", 7, ["MOTS-c", "SS-31", "Humanin"]],
   ["Melanocortins", 8, ["Melanotan I", "Melanotan II", "PT-141"]],
+  ["Growth factors", 3, ["IGF-1 LR3", "IGF-1 DES", "MGF", "PEG-MGF", "Follistatin"]],
 ];
 const ALLCATS = [...CATS.map(c => c[0]), "Blends", "Other"];
 const catOf = p => (CATS.find(c => c[2].includes(p)) || [])[0] || (/ \+ /.test(p) ? "Blends" : "Other");
