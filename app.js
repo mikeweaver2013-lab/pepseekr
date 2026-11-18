@@ -1085,7 +1085,10 @@ async function pullPrefs() {
 async function authInit() {
   if (!window.supabase) await new Promise(r => { const el = document.getElementById("sbjs"); if (!el) return r(); el.addEventListener("load", r, { once: true }); el.addEventListener("error", r, { once: true }); setTimeout(r, 15000); });
   const c = sbc(); if (!c) return;
-  if (location.hash === "#account") route(true);
+  // the "Sign in on this device" button in our email: #account?th=<token hash>
+  const th = (location.hash.match(/[?&]th=([^&]+)/) || [])[1];
+  if (th) { history.replaceState(null, "", "#account"); route(true); const { error } = await c.auth.verifyOtp({ token_hash: decodeURIComponent(th), type: "magiclink" }); if (error) toast("That sign-in link expired. Enter your email to get a new code.", 6000); }
+  else if (location.hash === "#account") route(true);
   try { const { data } = await c.auth.getSession(); SESS = data.session; } catch {}
   if (SESS) { await refreshMe(); await pullPrefs(); route(true); }
   else if (ME) { ME = null; store.set("pk_me", null); route(true); }
@@ -1107,22 +1110,32 @@ async function authInit() {
 /* sign in with an emailed 6-digit code (works inside the home-screen app, which can't see Safari's sign-in) */
 async function sendCode(email) {
   AUTH = { step: "email", email, busy: true, err: "" }; paintAuth();
-  const { error } = await sbc().auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: "https://pepseekr.com/#account" } });
-  AUTH = error ? { step: "email", email, busy: false, err: error.message.includes("rate") ? "Too many tries. Wait a minute and send again." : "We couldn't send the email. Check the address and try again." } : { step: "code", email, busy: false, err: "" };
+  // our branded email (pk-auth-send); Supabase's own email only as a fallback
+  let err = "";
+  try {
+    const r = await fetch(`${SB}/functions/v1/pk-auth-send`, { method: "POST", headers: { apikey: KEY, "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+    const j = await r.json().catch(() => ({}));
+    if (j.len) AUTH.len = j.len;
+    if (r.status === 429) err = "We just sent a code to this address. Check your inbox, or wait a minute and send again.";
+    else if (r.status === 400) err = "That email address doesn't look right. Check it and try again.";
+    else if (!r.ok) { const { error } = await sbc().auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: "https://pepseekr.com/#account" } }); if (error) err = "We couldn't send the email. Try again in a minute."; }
+  } catch { err = "Couldn't reach PepSeekr. Check your connection and try again."; }
+  const len = AUTH.len;
+  AUTH = err && !/just sent/.test(err) ? { step: "email", email, busy: false, err } : { step: "code", email, busy: false, err: err || "", len };
   paintAuth();
 }
 async function checkCode(code) {
   AUTH.busy = true; AUTH.err = ""; paintAuth();
   const { error } = await sbc().auth.verifyOtp({ email: AUTH.email, token: code, type: "email" });
   AUTH.busy = false;
-  if (error) { AUTH.err = "That code didn't work. Check the newest email, or send a new code."; paintAuth(); return; }
+  if (error) { AUTH.err = /expired/i.test(error.message) ? "That code expired. Send a new one." : "That code didn't work. Check the newest email, or send a new code."; paintAuth(); return; }
   AUTH = { step: "email", email: "", busy: false, err: "" };
   if ($("#sheet").classList.contains("open") && $("#authBox")) closeSheet?.();
 }
 function authForm() {
   const A = AUTH;
-  if (A.step === "code") return `<form id="codeForm" class="authf"><p class="t2">We sent a 6-digit code to <b>${esc(A.email)}</b>. Enter it here, or tap the link in the email.</p>
-    <input id="authCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" aria-label="6-digit code" class="authin mono" required>
+  if (A.step === "code") return `<form id="codeForm" class="authf"><p class="t2">We sent ${(A.len || 6) === 8 ? "an" : "a"} ${A.len || 6}-digit code to <b>${esc(A.email)}</b> from noreply@pepseekr.com. Enter it here, or tap the button in the email. Not there? Check spam or promotions.</p>
+    <input id="authCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="${"0".repeat(A.len || 6)}" aria-label="${A.len || 6}-digit code" class="authin mono" required>
     ${A.err ? `<p class="warn" role="alert">${esc(A.err)}</p>` : ""}
     <div class="row" style="gap:10px;justify-content:space-between"><button class="link" type="button" data-authback>Use a different email</button><button class="btn p" type="submit" ${A.busy ? "disabled" : ""}>${A.busy ? "Checking…" : "Sign in"}</button></div></form>`;
   return `<form id="emailForm" class="authf"><label class="lbl" for="authEmail">Email</label>
@@ -1207,9 +1220,9 @@ document.addEventListener("click", e => {
 }, true);
 document.addEventListener("submit", e => {
   if (e.target.id === "emailForm") { e.preventDefault(); const v = $("#authEmail").value.trim(); if (v) sendCode(v); }
-  if (e.target.id === "codeForm") { e.preventDefault(); const v = $("#authCode").value.replace(/\D/g, ""); if (v.length === 6) checkCode(v); else { AUTH.err = "Enter all 6 digits."; paintAuth(); } }
+  if (e.target.id === "codeForm") { e.preventDefault(); const v = $("#authCode").value.replace(/\D/g, ""); if (v.length >= 6) checkCode(v); else { AUTH.err = `Enter all ${AUTH.len || 6} digits.`; paintAuth(); } }
 });
-document.addEventListener("input", e => { if (e.target.id === "authCode" && e.target.value.replace(/\D/g, "").length === 6 && !AUTH.busy) checkCode(e.target.value.replace(/\D/g, "")); });
+document.addEventListener("input", e => { if (e.target.id === "authCode" && e.target.value.replace(/\D/g, "").length === (AUTH.len || 6) && !AUTH.busy) checkCode(e.target.value.replace(/\D/g, "")); });
 
 /* free users see the lowest-price route; the other routes and options show as locked */
 function lockedCtl(R, tabs) {
@@ -1405,7 +1418,7 @@ const pkLink = () => {
 function route(keepScroll) {
   if (!D) return;
   linkAdd();
-  let h = (location.hash || "#home").slice(1);
+  let h = (location.hash || "#home").slice(1).split("?")[0];
   if (h.startsWith("s-")) h = "v-" + h.slice(2);
   if (h === "sellers") h = "vendors";
   if (h === "list") h = "protocol";   // "My list" page; #protocol kept for old links
