@@ -227,6 +227,20 @@ const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.
 const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
 const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
 const inProt = p => PROT.some(i => i.pep === p);
+// per-vial drop threshold for in-app alerts (default 15%); a dollar target, if set, also counts
+const DEF_PCT = 15;
+const wPct = k => (WATCH[k] && WATCH[k].pct) || DEF_PCT;
+const dropOf = a => a.old > 0 ? Math.round((1 - a.now / a.old) * 100) : 0;
+const dropOk = a => { const k = a.pep + "|" + a.size, w = WATCH[k]; if (a.kind !== "drop" || !w || !w.on) return true; return dropOf(a) >= wPct(k) || (w.target && a.now <= w.target); };
+// the slider + live dollar line, used in the watchlist sheet and on the product page
+function pctCtl(k, compact) {
+  const [p, s] = k.split("|"), pct = wPct(k), b = bestPrice(live().filter(r => r.pep === p && r.size === s));
+  return `<div class="pctc" data-pctk="${esc(k)}"><label class="pctl" for="pct-${slugOf(k)}">Alert me when a store drops it by <b class="mono" data-pctv>${pct}%</b> or more</label>
+    <input type="range" id="pct-${slugOf(k)}" min="5" max="40" step="5" value="${pct}" data-pctr="${esc(k)}" aria-valuetext="${pct} percent">
+    <div class="pctticks" aria-hidden="true"><span>5%</span><span>15%</span><span>25%</span><span>40%</span></div>
+    ${b ? `<p class="hint" data-pctd>Best now ${money2(b.price)} at ${esc(V[b.v].name)}. ${pct}% below is <b>${money2(b.price * (1 - pct / 100))}</b>.</p>` : ""}
+    ${compact ? "" : pct !== DEF_PCT ? `<button class="link" type="button" data-pctreset="${esc(k)}">Reset to ${DEF_PCT}%</button>` : ""}</div>`;
+}
 
 /* ---------- art ---------- */
 let gid = 0;
@@ -253,7 +267,7 @@ const newest = () => Object.values(V).map(v => Date.parse(v.last_scraped_at) || 
 const pulled = () => newest() ? "pulled " + ago(new Date(newest()).toISOString()) : "loading";
 const curTab = () => { let h = (location.hash || "#home").slice(1); if (h === "list") h = "protocol"; return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
 function unread() { const since = seenAlerts(); return ALERTS.filter(a => Date.parse(a.at) > since && relevant(a)).length; }
-const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || PROT.some(i => ROWS.some(r => r.v === a.v && r.pep === i.pep)) : watchingPep(a.pep) || inProt(a.pep);
+const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || PROT.some(i => ROWS.some(r => r.v === a.v && r.pep === i.pep)) : (watchingPep(a.pep) || inProt(a.pep)) && dropOk(a);
 const themeSel = () => document.documentElement.dataset.theme || "system";
 function chrome() {
   const tab = curTab(), n = unread(), cnt = `<span class="cnt" ${n ? "" : "hidden"}>${n > 9 ? "9+" : n}</span>`;
@@ -301,7 +315,7 @@ function ctxTag(a) {
 function alertItem(a, since, compact) {
   const k = KIND[a.kind] || ["Update", "p-n"], un = Date.parse(a.at) > since;
   if (a.kind === "promo") return `<a class="ai ${un ? "unread" : ""}" href="#v-${esc(a.v)}"><span class="ud"></span><span class="vwell vw">${avatar(V[a.v])}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}</span>${ctxTag(a)}</span><div class="nm">${esc(a.note || V[a.v].promo_text || "Store-wide sale")}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span>${compact ? "" : `<span class="rt"></span>`}</a>`;
-  return `<a class="ai ${un ? "unread" : ""}" href="#p-${slugOf(a.pep)}"><span class="ud"></span><span class="vwell vw">${vial(a.pep, a.size, 50)}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}</span>${ctxTag(a)}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span><span class="rt">${a.old && a.old !== a.now ? `<span class="t3">${money2(a.old)}</span> → ` : ""}<b>${money2(a.now)}</b> ${delta(a)}</span></a>`;
+  return `<a class="ai ${un ? "unread" : ""}" href="#p-${slugOf(a.pep)}"><span class="ud"></span><span class="vwell vw">${vial(a.pep, a.size, 50)}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}${a.kind === "drop" && dropOf(a) > 0 ? " " + dropOf(a) + "%" : ""}</span>${ctxTag(a)}${a.kind === "drop" && bestPrice(live().filter(r => r.pep === a.pep && r.size === a.size))?.v === a.v ? `<span class="pill p-brand">Now the cheapest</span>` : ""}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span><span class="rt">${a.old && a.old !== a.now ? `<span class="t3">${money2(a.old)}</span> → ` : ""}<b>${money2(a.now)}</b> ${delta(a)}</span></a>`;
 }
 function dealsList(n) {
   const g = groupBy(vis(live().filter(r => V[r.v].rating >= 3.5))), out = [];
@@ -428,7 +442,7 @@ function vProduct(slug) {
       <div class="card panel"><div class="bar"><div><span class="lbl">Price history · 90 days</span><h3 style="margin-top:4px">Lowest ${esc(sizeTxt(size))} offer</h3></div><span class="mono t3" id="chsum" style="font-size:12px"></span></div><div class="chart" id="chart" style="margin-top:12px"><div class="hint">Loading…</div></div></div>
     </div>
     <aside class="rail">
-      <div class="card panel notify"><h3>Notify me when ${esc(sizeTxt(size))} drops below</h3><div class="row"><label class="pin">$<input id="tgt" inputmode="decimal" value="${w.target ?? ""}" placeholder="${(b.price * .9).toFixed(2)}" aria-label="Target price"></label><button class="btn p" type="button" data-settarget>Set alert</button></div>
+      <div class="card panel notify"><h3>Price alerts for ${esc(sizeTxt(size))}</h3>${pctCtl(p + "|" + size)}<div class="lbl" style="margin:14px 0 6px">Or alert at a price</div><div class="row"><label class="pin">$<input id="tgt" inputmode="decimal" value="${w.target ?? ""}" placeholder="${(b.price * (1 - wPct(p + "|" + size) / 100)).toFixed(2)}" aria-label="Target price"></label><button class="btn" type="button" data-settarget>Set</button></div>
         <div class="row" style="gap:16px">${["drop", "restock", "sale"].map(k => `<button type="button" class="ck" role="checkbox" aria-checked="${w[k] !== false}" data-wk="${k}"><span class="chk">${I.check}</span>${{ drop: "Price drop", restock: "Restock", sale: "Sale" }[k]}</button>`).join("")}</div>${pushCard(true)}</div>
       <div class="card panel"><div class="bar"><h3>Verified buyer reviews</h3><button class="link" type="button" data-review="${esc(b.v)}">Write one</button></div>
         ${rv.length ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${avg.toFixed(1)}</b><div>${stars(avg)}<div class="hint">${rv.length} verified review${rv.length > 1 ? "s" : ""}</div></div></div>${hist(rv)}${rv.slice(0, 4).map(r => reviewItem(r, true)).join("")}` : `<div class="empty" style="padding:18px 0 4px"><span class="ei">${I.shield}</span><b>No reviews for ${esc(short(p))} yet</b><p>Reviews come only from buyers who show a receipt.</p></div>`}</div>
@@ -746,7 +760,7 @@ function vAlerts(seg) {
   const segc = `<div class="seg" role="radiogroup" aria-label="View" style="margin-top:14px"><button type="button" role="radio" data-aseg="alerts" aria-checked="${aseg === "alerts"}">Alerts<small>${un} new</small></button><button type="button" role="radio" data-aseg="watchlist" aria-checked="${aseg === "watchlist"}">Watchlist<small>${nw}</small></button></div>`;
   const wk = list.filter(a => Date.now() - Date.parse(a.at) < 7 * 864e5);
   const rail = `<aside class="rail"><div class="card panel"><span class="lbl">This week</span><div class="g3c" style="grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">${[["Drops", wk.filter(a => a.kind === "drop").length], ["Sales", wk.filter(a => a.kind === "sale" || a.kind === "promo").length], ["Restocks", wk.filter(a => a.kind === "restock").length]].map(([t, n]) => `<div><b class="mono" style="font-size:22px">${n}</b><div class="lbl">${t}</div></div>`).join("")}</div></div>
-    <div class="card panel"><h3>Notify me about</h3>${[["drop", "Price drops", "5% or more on a watched vial"], ["restock", "Restocks", "A watched vial is back"], ["sale", "Sales", "Item and store-wide sales"]].map(([k, t, s]) => `<button type="button" class="srow" role="switch" aria-checked="${store.get("pf_n_" + k, true)}" data-npref="${k}"><span><b style="font-weight:600">${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`).join("")}
+    <div class="card panel"><h3>Notify me about</h3>${[["drop", "Price drops", "Your % per vial, 15% unless you change it"], ["restock", "Restocks", "A watched vial is back"], ["sale", "Sales", "Item and store-wide sales"]].map(([k, t, s]) => `<button type="button" class="srow" role="switch" aria-checked="${store.get("pf_n_" + k, true)}" data-npref="${k}"><span><b style="font-weight:600">${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`).join("")}
       <div class="lbl" style="margin:14px 0 8px">Deliver by</div>${pushCard(false)}</div>
     <div class="card panel monly"><h3>Appearance</h3><div class="seg" role="radiogroup" aria-label="Theme" style="margin-top:10px">${[["system", "System"], ["light", "Light"], ["dark", "Dark"]].map(([k, t]) => `<button type="button" role="radio" data-theme-set="${k}" aria-checked="${themeSel() === k}">${t}</button>`).join("")}</div></div></aside>`;
   const body = aseg === "watchlist" ? watchlist() : `<div class="hs row" style="flex-wrap:nowrap;gap:8px">${[["all", "All · " + list.length], ["drop", "Price drops"], ["restock", "Restocks"], ["sale", "Sales"]].map(([k, t]) => `<button class="chip" type="button" data-afilt="${k}" aria-pressed="${afilt === k}">${t}</button>`).join("")}</div>
@@ -758,11 +772,11 @@ function vAlerts(seg) {
 function watchlist() {
   const ks = Object.keys(WATCH);
   if (!ks.length) return `<div class="card empty"><span class="ei">${I.star}</span><b>Nothing on your watchlist yet</b><p>Tap ☆ on any vial to track its price.</p><a class="btn" href="#search">Browse the catalog</a></div>`;
-  return `<div class="card wl"><div class="wr donly" style="padding-top:10px;padding-bottom:10px"><span class="lbl">Peptide</span><span class="lbl">Best now</span><span class="lbl tgc">Your target</span><span class="lbl spk">30 days</span><span></span></div>${ks.map(k => {
+  return `<div class="card wl"><div class="wr donly" style="padding-top:10px;padding-bottom:10px"><span class="lbl">Peptide</span><span class="lbl">Best now</span><span class="lbl tgc">Alert at</span><span class="lbl spk">30 days</span><span></span></div>${ks.map(k => {
     const [p, s] = k.split("|"), w = WATCH[k], b = bestPrice(live().filter(r => r.pep === p && r.size === s)), hit = w.target && b && b.price <= w.target;
     return `<div class="wr"><a href="#p-${slugOf(p)}" class="row" style="gap:10px;flex-wrap:nowrap;min-width:0"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(p, s, 42)}</span><span style="min-width:0"><b style="font-weight:600">${esc(short(p))}</b> <span class="mono t3">${esc(sizeTxt(s))}</span><span class="hint" style="display:block">${b ? esc(V[b.v].name) : "Out of stock"}</span></span></a>
       <span class="mono"><b>${b ? money2(b.price) : "—"}</b>${hit ? ` <span class="pill p-brand">Hit</span>` : ""}</span>
-      <label class="tg tgc">$<input value="${w.target ?? ""}" placeholder="target" inputmode="decimal" data-tgt="${esc(k)}" aria-label="Target price for ${esc(p)} ${esc(s)}"></label>
+      <button type="button" class="chip sm pctchip tgc" data-pctopen="${esc(k)}" aria-label="Drop alert for ${esc(p)} ${esc(s)}: ${wPct(k)}%${w.target ? " or " + money2(w.target) : ""}. Change">↓${wPct(k)}%${w.target ? ` · ${money2(w.target)}` : ""}</button>
       <span class="spk" data-spark="${esc(k)}"></span>
       <button type="button" role="switch" aria-checked="${w.on}" data-won="${esc(k)}" aria-label="Alerts for ${esc(p)} ${esc(s)}" style="min-height:44px;display:grid;place-items:center"><span class="tog"><i></i></span></button></div>`; }).join("")}</div>`;
 }
@@ -1368,6 +1382,7 @@ function openSheet(html, label) {
 }
 function closeSheet() {
   const sh = $("#sheet"); if (!sh.classList.contains("open")) return;
+  const hadPct = !!sh.querySelector(".pctc"); if (hadPct) { clearTimeout(window.__pctT); saveW(); setTimeout(() => route(true), 0); }
   sh.classList.remove("open"); sh.style.transform = ""; $("#scrim").classList.remove("open"); document.body.style.overflow = ""; RW = null;
   lastFocus?.focus?.({ preventScroll: true });
 }
@@ -1495,6 +1510,13 @@ document.addEventListener("click", async e => {
   const fo = t.closest("[data-follow]"); if (fo) { const id = fo.dataset.follow; FOLLOW.has(id) ? FOLLOW.delete(id) : FOLLOW.add(id); store.set("pf_follow", [...FOLLOW]); toast(FOLLOW.has(id) ? `You'll see ${V[id].name}'s sales in Alerts` : `Stopped following ${V[id].name}`); route(true); return; }
   const vr = t.closest("[data-vrf]"); if (vr) { vrf = vr.dataset.vrf; route(true); return; }
   const cv = t.closest("[data-coav]"); if (cv) { coaV = cv.dataset.coav; route(true); return; }
+  const po = t.closest("[data-pctopen]"); if (po) { const k = po.dataset.pctopen, [p, sz] = k.split("|"), w = WATCH[k] || {};
+    openSheet(`<div class="shd"><h2>${esc(short(p))} ${esc(sizeTxt(sz))}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
+      <div style="margin-top:14px">${pctCtl(k)}</div>
+      <div class="lbl" style="margin:16px 0 6px">Or alert at a price</div><div class="row" style="gap:8px"><label class="pin">$<input inputmode="decimal" value="${w.target ?? ""}" placeholder="optional" data-tgt="${esc(k)}" aria-label="Target price"></label>${w.target ? `<button class="link" type="button" data-tgtclear="${esc(k)}">Clear</button>` : ""}</div>
+      <button class="btn p" type="button" data-close style="width:100%;margin-top:18px">Done</button>`, "Price alert"); return; }
+  const pr = t.closest("[data-pctreset]"); if (pr) { const k = pr.dataset.pctreset; if (WATCH[k]) { delete WATCH[k].pct; saveW(); } const c = t.closest(".pctc"); if (c) c.outerHTML = pctCtl(k); if (!$("#sheet.open")) route(true); return; }
+  const tc = t.closest("[data-tgtclear]"); if (tc) { const k = tc.dataset.tgtclear; if (WATCH[k]) { WATCH[k].target = null; saveW(); } const i = $(`[data-tgt="${CSS.escape(k)}"]`); if (i) i.value = ""; tc.remove(); return; }
   if (t.closest("[data-settarget]")) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size, v = parseFloat($("#tgt").value); WATCH[k] = Object.assign({ drop: true, restock: true, sale: true }, WATCH[k] || {}, { on: true, target: isFinite(v) && v > 0 ? v : null }); saveW(); toast(isFinite(v) && v > 0 ? `We'll alert you when ${short(pv.dataset.pep)} ${sizeTxt(pv.dataset.size)} drops below ${money2(v)}` : "Watching for sales and drops"); route(true); return; }
   const wk = t.closest("[data-wk]"); if (wk) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size; WATCH[k] = Object.assign({ target: null, on: true, drop: true, restock: true, sale: true }, WATCH[k] || {}); WATCH[k][wk.dataset.wk] = !(WATCH[k][wk.dataset.wk] !== false); wk.setAttribute("aria-checked", WATCH[k][wk.dataset.wk]); saveW(); return; }
   const wo = t.closest("[data-won]"); if (wo) { const w = WATCH[wo.dataset.won]; w.on = !w.on; wo.setAttribute("aria-checked", w.on); saveW(); return; }
@@ -1652,3 +1674,14 @@ function pathBoot() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && D && Date.now() - Date.parse(store.get("pf_cache", {}).at || 0) > 5 * 60 * 1000) load(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 })();
+document.addEventListener("input", e => {
+  const r = e.target.closest?.("[data-pctr]"); if (!r) return;
+  const k = r.dataset.pctr, v = +r.value, c = r.closest(".pctc");
+  WATCH[k] = Object.assign({ target: null, on: true, drop: true, restock: true, sale: true }, WATCH[k] || {}, { pct: v, on: true });
+  r.setAttribute("aria-valuetext", v + " percent");
+  c.querySelector("[data-pctv]").textContent = v + "%";
+  const [p, sz] = k.split("|"), b = bestPrice(live().filter(x => x.pep === p && x.size === sz)), d = c.querySelector("[data-pctd]");
+  if (b && d) d.innerHTML = `Best now ${money2(b.price)} at ${esc(V[b.v].name)}. ${v}% below is <b>${money2(b.price * (1 - v / 100))}</b>.`;
+  clearTimeout(window.__pctT); window.__pctT = setTimeout(saveW, 400);
+});
+document.addEventListener("change", e => { if (e.target.closest?.("[data-pctr]") && !$("#sheet.open")) route(true); });
