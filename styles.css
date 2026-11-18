@@ -849,3 +849,9 @@ tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset
 .ocard.focus{box-shadow:0 0 0 2px var(--brand)}
 @media (prefers-reduced-motion:no-preference){tr.focus td,.ocard.focus{animation:fpulse 1.6s ease-out 1}}
 @keyframes fpulse{0%{background:var(--brand-a28)}100%{}}
+/* Buy on store-page cards; cheaper-size hint */
+.ocard:has(.vbuy){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
+.ocard .vbuy{white-space:nowrap}
+.ocard .vbuy svg,.tbl .btn.sm svg{width:14px;height:14px}
+.szhint{margin:0;padding:12px 18px;border-top:1px solid var(--border);font-size:14px;color:var(--text-2);background:var(--brand-a10)}
+.ocard:has(.vbuy) .px span{white-space:nowrap}
