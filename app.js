@@ -613,7 +613,7 @@ function vProtocol() {
   const lineTxt = a => `${esc(short(a.item.pep))} ${esc(sizeTxt(a.item.size))}${a.offer.swap ? ` <span class="swap-pill">⇄ ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))}</span>` : ""}${a.item.qty > 1 ? ` ×${a.item.qty}` : ""}`;
   const legs = r => Object.entries(r.stores).map(([vid, s], i) => `<div class="leg"><span class="n">${i + 1}</span><div style="min-width:0"><b>${esc(V[vid].name)}</b> <span class="hint">${repTxt(V[vid])}</span><ul>${r.assign.filter(a => a.offer.v === vid).map(a => `<li><span>${lineTxt(a)}</span><b>${money2(a.offer.price * a.item.qty)}</b></li>`).join("")}${shipLine(vid, s)}</ul>${nudge(vid, s)}</div><div class="rt"><b>${money2(s.sub + s.ship)}</b>${cartBtn(vid)}<a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener" style="font-size:13px">Go to ${esc(V[vid].name)} ↗</a></div></div>`).join("");
   const swapBox = r => r.swaps.map(a => `<div class="swapbox"><span class="sw-ic">⇄</span><span class="t"><b>${esc(short(a.item.pep))}: ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))} (${money2(a.offer.price)})</b> for ${esc(sizeTxt(a.item.size))} <span class="t3">· ${esc(V[a.offer.v].name)} doesn't sell ${esc(sizeTxt(a.item.size))}. Same compound, same total.</span></span></div>`).join("");
-  const sumCard = r => `<div class="card glow sum" style="align-self:start"><div class="r"><span>Items</span><b>${money2(r.sub)}</b></div><div class="r"><span>Shipping</span><b>${money2(r.ship)}${r.est ? " est." : ""}</b></div><div class="r" style="font-size:16px"><span><b style="font-family:inherit">Total</b></span><b>${money2(r.total)}</b></div><div class="r"><span class="t2">Average, same items</span><b class="t2">${money2(r.med)}</b></div><div class="save"><span><span class="lbl">You save vs average</span><div class="hint">before shipping</div></span><b>${money2(Math.max(0, r.save))}</b></div>${r.est ? `<p class="hint">“est.” = this store shows shipping only at checkout; we assume ${money(SHIP_EST)}.</p>` : ""}<div class="ruo">For laboratory research use only</div></div>`;
+  const sumCard = r => `<div class="card glow sum" style="align-self:start"><div class="r"><span>Items</span><b>${money2(r.sub)}</b></div><div class="r"><span>Shipping</span><b>${money2(r.ship)}${r.est ? " est." : ""}</b></div><div class="r" style="font-size:16px"><span><b style="font-family:inherit">Total</b></span><b>${money2(r.total)}</b></div><div class="r"><span class="t2">Average, same items</span><b class="t2">${money2(r.med)}</b></div><div class="save"><span><span class="lbl">You save vs average</span><div class="hint">before shipping</div></span><b>${money2(Math.max(0, r.save))}</b></div>${r.est ? `<p class="hint">“est.” = this store shows shipping only at checkout; we assume ${money(SHIP_EST)} per store.</p>` : ""}${PROT.length ? `<a class="btn pk" href="${pkLink()}" target="_blank" rel="noopener">Ordered these? Add them to PepKeep</a><p class="hint" style="margin-top:6px">Opens PepKeep with these vials ready to set up. Only names, sizes and counts are sent.</p>` : ""}<div class="ruo">For laboratory research use only</div></div>`;
   const why = r => {
     if (same(r, R.rec) && R.low && !same(r, R.low)) { const d = r.total - R.low.total, k = R.low.n - r.n; return `${money2(d)} over the lowest price, ${k} fewer checkout${k > 1 ? "s" : ""}`; }
     if (same(r, R.val) && !same(r, R.rec)) return "Vendors rated ★ 3.0+, COA on file where possible";
@@ -1084,8 +1084,23 @@ function refreshGrid() {
 
 /* ---------- router ---------- */
 let lastRoute = "";
+function linkAdd() {
+  // PepKeep link: #list?add=Name size*qty;...  (also ?add= in the query). Names and vial sizes only, never doses or who it's for.
+  const hm = (location.hash || "").match(/^#list\?(.*)$/), q = new URLSearchParams(hm ? hm[1] : location.search), raw = q.get("add");
+  if (raw == null) return;
+  const from = (q.get("from") || "").toLowerCase();
+  const items = []; raw.split(";").slice(0, 40).forEach(t => { const m = t.match(/^(.*?)\s*\*\s*(\d{1,3})\s*$/), qty = m ? Math.max(1, Math.min(99, +m[2])) : 1; const f = parseList(m ? m[1] : t)[0]; if (f) { const x = items.find(i => i.pep === f.pep && i.size === f.size); x ? x.qty += qty : items.push({ ...f, qty }); } });
+  history.replaceState(null, "", location.pathname + "#list");
+  if (!items.length) { toast("We couldn't match anything in that list"); return; }
+  if (from === "pepkeep") PROT = [];
+  items.forEach(i => { const x = PROT.find(p => p.pep === i.pep && i.size === p.size); x ? x.qty = i.qty : PROT.push(i); WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; });
+  saveP(); store.set("pf_watch", WATCH);
+  toast(`${from === "pepkeep" ? "Your PepKeep stack: " : "Added "}${items.length} item${items.length === 1 ? "" : "s"}`, 4000);
+}
+const pkLink = () => "https://pepkeep.io/?box=" + encodeURIComponent(PROT.slice(0, 30).map(i => `${i.pep}~${String(i.size).replace(/\s+/g, "")}*${i.qty || 1}`).join(";")) + "&s=pepseekr";
 function route(keepScroll) {
   if (!D) return;
+  linkAdd();
   let h = (location.hash || "#home").slice(1);
   if (h.startsWith("s-")) h = "v-" + h.slice(2);
   if (h === "sellers") h = "vendors";

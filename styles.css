@@ -737,3 +737,11 @@ dl.pol dt{color:var(--text-3)}
 @keyframes fpulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--data) 45%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @media (prefers-reduced-motion:reduce){.fresh .dot{animation:none}.fresh .bar{transition:none}}
 @media (max-width:767px){.fresh{height:28px;font-size:11px;gap:6px}}
+
+/* PepKeep link */
+.sum .btn.pk{display:flex;justify-content:center;width:100%;box-sizing:border-box;margin-top:12px;min-height:44px;height:auto;padding:10px 14px;white-space:normal;text-align:center;line-height:1.3}
+/* the summary card never grows past its column */
+.expand{grid-template-columns:minmax(0,1fr) minmax(0,300px)}
+.sum{min-width:0}
+.sum .r{gap:10px}.sum .r b{white-space:nowrap}
+@media (max-width:767px){.expand{grid-template-columns:minmax(0,1fr)}}
