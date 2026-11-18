@@ -178,6 +178,8 @@ const cartPill = v => !fillsCart(v) ? "" : `<span class="pill p-cart" title="${v
 // Influencer ties: who owns or promotes the store, with the source we found it in
 const I_MIC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
 const tiePill = v => !v || !v.tie_text ? "" : `<span class="pill p-tie" title="${esc(v.tie_text)}">${I_MIC}<span class="cp-t">${v.tie_kind === "owner" ? "Influencer-owned" : "Influencer-promoted"}</span></span>`;
+const tieHit = (v, q) => q.length >= 3 ? (v.tie_people || []).find(n => n.toLowerCase().includes(q)) : null;
+const tieWho = v => (v.tie_people || [])[0] || "";
 const tieLine = v => !v || !v.tie_text ? "" : `<p class="tie">${I_MIC}<span>${esc(v.tie_text)}.${v.tie_url ? ` <a href="${esc(v.tie_url)}" target="_blank" rel="noopener">Source ↗</a>` : ""}</span></p>`;
 const vis = (rows = live()) => rows.filter(r => (!S.fill || fillsCart(V[r.v])) && (!S.rep || !lowRated(V[r.v])) && (!S.stock || r.stock) && (!S.coa || (r.coa === true && r.coaState !== "reused")) && (!S.vendor || r.v === S.vendor));
 const bestOf = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) / c.sv < eff(a) / a.sv ? c : a) : null; };
@@ -311,7 +313,7 @@ function dealCard(d, glow) {
   return `<a class="card deal ${glow ? "glow" : ""}" href="#p-${slugOf(d.p)}"><span class="vw">${vial(d.p, d.s, 82)}</span><span class="bd"><span class="row" style="justify-content:space-between"><span class="lbl">vs market average</span>${coaTag(d.b)}</span><div style="font-weight:600;margin-top:6px">${esc(short(d.p))} · ${esc(sizeTxt(d.s))}</div><div class="px">${money2(d.b.price)}<s>${money2(d.b.med)}</s></div><div class="ft"><span class="t2">${esc(V[d.b.v].name)}</span><span class="pct">−${d.pct}%</span></div></span></a>`;
 }
 function vendorCard(v, glow) {
-  return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div><span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
+  return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div>${v.tie_text ? `<span class="vtie">${I_MIC}${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieWho(v))}</span>` : ""}<span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
     <div class="trip"><div><span class="lbl">Rating</span><b>${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : v.site_reviews > 0 && v.site_rating != null ? "★ " + (+v.site_rating).toFixed(1) : "—"}</b><span class="hint">${v.rvN ? v.rvN + " verified" : v.finnrick_pct != null ? "Finnrick lab tests" : v.site_reviews > 0 && v.site_rating != null ? v.site_reviews + " on their site" : "none yet"}</span></div><div><span class="lbl">COA on file</span><b>${coaPctTxt(v)}</b></div><div><span class="lbl">vs market</span>${(d => `<b class="${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</b>`)(Math.round((v.priceIdx - 1) * 100))}</div></div>
     <div class="cbar" title="COA coverage ${v.coaPct}%"><i style="width:${v.coaPct}%"></i></div>
     <div class="vfoot"><span>${I.truck.replace("<svg", '<svg style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px"')}${esc(shipText(v))}</span><span class="mono">${v.count} listings</span></div>${v.promo_text ? `<div>${promoPill(v)}</div>` : ""}</a>`;
@@ -332,7 +334,7 @@ function catalogGrid(limit) {
   else if (S.sort === "score") peps.sort((a, b) => Math.max(...flat(b).map(r => V[r.v].score)) - Math.max(...flat(a).map(r => V[r.v].score)));
   else if (S.sort === "rating") peps.sort((a, b) => Math.max(...flat(b).map(r => V[r.v].rating)) - Math.max(...flat(a).map(r => V[r.v].rating)));
   else peps.sort((a, b) => a.localeCompare(b));
-  return { html: peps.slice(0, limit || 9999).map(p => pcard(p, flat(p))).join("") + (limit && peps.length > limit ? `<a class="btn lg" href="#search" style="grid-column:1/-1">See all ${peps.length} peptides</a>` : "") || `<div class="card empty" style="grid-column:1/-1"><span class="ei">${I.search}</span><b>Nothing matches that</b><p>Check the spelling, or loosen the filters.</p><button class="btn" type="button" data-clearf>Clear filters</button></div>`, n: peps.length, offers: rows.length };
+  return { html: peps.slice(0, limit || 9999).map(p => pcard(p, flat(p))).join("") + (limit && peps.length > limit ? `<a class="btn lg" href="#search" style="grid-column:1/-1">See all ${peps.length} peptides</a>` : "") || (vMatch() ? `<p class="hint" style="grid-column:1/-1">No peptides match. Tap a store above to see its prices.</p>` : "") || `<div class="card empty" style="grid-column:1/-1"><span class="ei">${I.search}</span><b>Nothing matches that</b><p>Check the spelling, or loosen the filters.</p><button class="btn" type="button" data-clearf>Clear filters</button></div>`, n: peps.length, offers: rows.length };
 }
 function catCounts() { const g = groupBy(vis()), c = { All: Object.keys(g).length, Watching: Object.keys(g).filter(p => watchingPep(p) || inProt(p)).length }; ALLCATS.forEach(k => c[k] = Object.keys(g).filter(p => catOf(p) === k).length); return c; }
 function catalog(limit) {
@@ -387,7 +389,13 @@ function vSearch() {
   return `<div class="wrap"><div class="monly" style="margin-top:14px"><label class="msearch">${I.search}<input type="search" id="mq" placeholder="Search peptides or vendors" enterkeyhint="search" value="${esc(S.q)}" aria-label="Search peptides or vendors"><button class="mib" type="button" data-filters aria-label="Filters">${I.sliders}</button></label>
     <div class="hs mchips" style="margin-top:12px"><button class="chip" type="button" data-cat="All" aria-pressed="${S.cat === "All"}">All <span>${c.All}</span></button><button class="chip" type="button" data-cat="Watching" aria-pressed="${S.cat === "Watching"}">☆ Watching <span>${c.Watching}</span></button>${ALLCATS.filter(k => c[k]).map(k => `<button class="chip" type="button" style="--h:var(--cat-${catN(k)})" data-cat="${esc(k)}" aria-pressed="${S.cat === k}">${esc(k)} <span>${c[k]}</span></button>`).join("")}</div></div>
     <div class="donly">${sec("", "Catalog", S.q ? `Results for “${esc(S.q)}”` : "Every peptide we track")}${filtersBar()}<div style="height:20px"></div></div>
-    <div style="height:14px" class="monly"></div>${catalog()}</div>`;
+    <div style="height:14px" class="monly"></div><div id="vmatch">${vMatch()}</div>${catalog()}</div>`;
+}
+// stores whose name or influencer matches the search
+function vMatch() {
+  const q = (S.q || "").trim().toLowerCase(); if (q.length < 3) return "";
+  const vs = Object.values(V).filter(v => v.name.toLowerCase().includes(q) || tieHit(v, q)); if (!vs.length) return "";
+  return `<div class="vmatch">${vs.slice(0, 4).map(v => `<a class="card vm" href="#v-${esc(v.id)}">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="hint">${tieHit(v, q) ? `${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieHit(v, q))}` : `Store · score ${v.score}`}</span></span>${I.chev}</a>`).join("")}</div>`;
 }
 
 /* ---------- product ---------- */
@@ -492,10 +500,13 @@ function vVendor(id) {
 
 /* ---------- vendors list, seller log ---------- */
 function vVendors() {
-  const vs = Object.values(V).sort((a, b) => b.score - a.score);
+  const all = Object.values(V).sort((a, b) => b.score - a.score), nTie = all.filter(v => v.tie_text).length;
+  const vs = S.vtie ? all.filter(v => v.tie_text) : all;
   return `<div class="wrap">${sec("", "Vendors", "Who to buy from", "Score = reviews 40 + price 30 + COA 20 + shipping 10")}
     <p class="t2" style="max-width:70ch;margin-top:-6px">Reviews come from buyers who showed a receipt, blended with each vendor's outside reputation. Price compares every vial to the average for the same size. Vendors are listed for free; none pay for placement or ranking.</p>
-    <div class="g3c" style="margin-top:20px">${vs.map((v, i) => vendorCard(v, i === 0)).join("")}</div>
+    <div class="row" style="gap:8px;margin-top:16px" role="radiogroup" aria-label="Show"><button class="chip" type="button" role="radio" data-vtie="" aria-checked="${!S.vtie}" aria-pressed="${!S.vtie}">All stores <span>${all.length}</span></button><button class="chip" type="button" role="radio" data-vtie="1" aria-checked="${!!S.vtie}" aria-pressed="${!!S.vtie}">${I_MIC}Influencer stores <span>${nTie}</span></button></div>
+    ${S.vtie ? `<p class="hint" style="margin-top:8px">Stores owned by, or promoted by, a creator or podcaster. Each tie links to where we found it.</p>` : ""}
+    <div class="g3c" style="margin-top:16px">${vs.map((v, i) => vendorCard(v, i === 0 && !S.vtie)).join("")}</div>
     <div class="g3c" style="margin-top:36px;grid-template-columns:1fr 1fr">
       <div class="card panel"><span class="kick"><span class="lbl">Suggest a seller</span></span><h3 style="margin-top:10px">Know a vendor we should check?</h3><p class="hint" style="margin-top:4px">We vet every store the same way: a readable catalog, lab reports on product pages, real contact details, and no dosing or health claims.</p>
         <form id="suggest" class="notify" style="margin-top:12px"><input class="field" name="url" placeholder="Store web address" required inputmode="url" autocomplete="off" aria-label="Store web address"><input class="field" name="name" placeholder="Store name (optional)" aria-label="Store name"><div class="seg" role="radiogroup" aria-label="I'm a"><button type="button" role="radio" aria-checked="true" data-kind="buyer">I bought from them</button><button type="button" role="radio" aria-checked="false" data-kind="seller">I run this store</button></div><input class="field" name="email" type="email" placeholder="Email (optional, for the result)" aria-label="Email" autocomplete="email"><button class="btn p" type="submit">Send it in</button></form></div>
@@ -1265,11 +1276,12 @@ let sIdx = -1;
 function suggest(q) {
   const el = $("#sugg"); if (!el) return; q = q.trim().toLowerCase();
   if (!q) { el.classList.remove("open"); return; }
-  const ps = PEPS.filter(p => p.toLowerCase().includes(q) || short(p).toLowerCase().includes(q)).slice(0, 6), vs = Object.values(V).filter(v => v.name.toLowerCase().includes(q)).slice(0, 3);
-  el.innerHTML = ps.map(p => { const b = bestOf(live().filter(r => r.pep === p)); return `<a href="#p-${slugOf(p)}" role="option"><span class="vw">${vial(p, b?.size || "", 34)}</span><span>${esc(p)}<span class="hint" style="display:block">${esc(catOf(p))}</span></span><span class="r">${b ? "from " + money2(b.price) : ""}</span></a>`; }).join("") + vs.map(v => `<a href="#v-${esc(v.id)}" role="option"><span class="vw">${avatar(v)}</span><span>${esc(v.name)}<span class="hint" style="display:block">Vendor · score ${v.score}</span></span></a>`).join("") || `<p class="hint" style="padding:10px">Nothing matches “${esc(q)}”.</p>`;
+  const ps = PEPS.filter(p => p.toLowerCase().includes(q) || short(p).toLowerCase().includes(q)).slice(0, 6), vs = Object.values(V).filter(v => v.name.toLowerCase().includes(q) || tieHit(v, q)).slice(0, 4);
+  el.innerHTML = ps.map(p => { const b = bestOf(live().filter(r => r.pep === p)); return `<a href="#p-${slugOf(p)}" role="option"><span class="vw">${vial(p, b?.size || "", 34)}</span><span>${esc(p)}<span class="hint" style="display:block">${esc(catOf(p))}</span></span><span class="r">${b ? "from " + money2(b.price) : ""}</span></a>`; }).join("") + vs.map(v => `<a href="#v-${esc(v.id)}" role="option"><span class="vw">${avatar(v)}</span><span>${esc(v.name)}<span class="hint" style="display:block">${tieHit(v, q) ? `${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieHit(v, q))}` : `Vendor · score ${v.score}`}</span></span></a>`).join("") || `<p class="hint" style="padding:10px">Nothing matches “${esc(q)}”.</p>`;
   el.classList.add("open"); sIdx = -1; el.parentElement.setAttribute("aria-expanded", "true");
 }
 function refreshGrid() {
+  if ($("#vmatch")) $("#vmatch").innerHTML = vMatch();
   const r = catalogGrid(location.hash === "#search" ? 0 : 24); if ($("#pgrid")) { $("#pgrid").innerHTML = r.html; $("#catmeta").textContent = `${r.n} peptides · ${r.offers} offers`; }
   $$("[data-cat]").forEach(b => b.tagName === "BUTTON" && b.setAttribute("aria-pressed", b.dataset.cat === S.cat));
 }
@@ -1376,6 +1388,7 @@ document.addEventListener("click", async e => {
   const bd = t.closest("[data-board]"); if (bd) { boardSheet(bd.dataset.board); return; }
   if (t.closest("[data-boardgo]")) { boardGo(); return; }
   if (t.closest("[data-boardopen]")) { boardOpen(); return; }
+  const vt = t.closest("[data-vtie]"); if (vt) { S.vtie = !!vt.dataset.vtie; route(true); return; }
   if (t.closest("[data-showall]")) { S.stock = false; S.coa = false; S.rep = false; S.fill = false; S.vendor = ""; saveS(); route(true); return; }
   if (t.closest("[data-chkmore]")) { S.chkMore = true; const r = document.getElementById("chkRes"); if (r) r.innerHTML = chkRes(""); return; }
   const st = t.closest("[data-strat]"); if (st) { S.tab = st.dataset.strat; S.open = null; route(true); return; }

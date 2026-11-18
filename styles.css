@@ -781,3 +781,9 @@ dl.pol dt{color:var(--text-3)}
 .tie{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:14.5px;color:var(--text-2);max-width:62ch}
 .tie svg{width:16px;height:16px;flex:none;margin-top:3px;color:var(--warn)}
 .tie a{color:var(--brand);white-space:nowrap}
+.vmatch{display:grid;gap:8px;margin-bottom:14px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.vm{display:grid;grid-template-columns:auto minmax(0,1fr) 16px;gap:10px;align-items:center;padding:12px 14px}
+.vm b{display:block}.vm svg{width:16px;height:16px}
+.vtie{display:inline-flex;gap:5px;align-items:center;font-size:12.5px;color:var(--warn);margin-top:3px}
+.vtie svg{width:13px;height:13px}
+[data-vtie] svg{width:13px;height:13px;margin-right:4px;vertical-align:-2px}
