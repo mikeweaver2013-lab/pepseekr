@@ -745,3 +745,32 @@ dl.pol dt{color:var(--text-3)}
 .sum{min-width:0}
 .sum .r{gap:10px}.sum .r b{white-space:nowrap}
 @media (max-width:767px){.expand{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- Pro ---------- */
+.acct{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-top:18px;align-items:start}
+@media (max-width:760px){.acct{grid-template-columns:minmax(0,1fr)}}
+.acct .r2{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.authf{display:grid;gap:12px}
+.authin{height:48px;border:1px solid var(--border-2);border-radius:12px;padding:0 14px;font-size:16px;background:var(--bg);color:inherit;width:100%}
+#authCode{font-size:24px;letter-spacing:.3em;text-align:center}
+.perks{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:10px}
+.perks li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:10px;align-items:start;font-size:14.5px}
+.perks li svg{width:18px;height:18px;color:var(--brand);margin-top:2px}
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.plan{display:grid;gap:2px;text-align:left;padding:14px;border:1px solid var(--border-2);border-radius:14px;background:none;color:inherit;cursor:pointer;font:inherit}
+.plan:first-child{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand) inset}
+.plan b{font-size:22px}
+.plan .pl{font-size:13px;color:var(--text-2)}
+.plan:hover,.plan:focus-visible{border-color:var(--brand)}
+.chip.locked,.ck.locked,.lockb{opacity:.8}
+.chip.locked svg,.ck.locked svg,.lockb svg{width:13px;height:13px;margin-right:5px;vertical-align:-1px}
+.lockb{margin-left:6px}
+#top .acts a.btn svg{width:16px;height:16px}
+/* cart-fill pill: text on desktop, icon only on phones */
+.pill.p-cart{display:inline-flex;align-items:center;gap:4px;background:var(--brand-a10);color:var(--brand);border:1px solid var(--brand-a28)}
+.pill.p-cart svg{width:13px;height:13px;flex:none}
+@media (max-width:760px){.pill.p-cart .cp-t{display:none}.pill.p-cart{padding-left:6px;padding-right:6px}}
+.cbtns{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.cbtns .lockb{margin-left:0}
+@media (max-width:760px){.leg .rt{flex-wrap:wrap}.leg .rt .cbtns{justify-content:flex-start}}
+.ck.locked{margin-right:14px}

@@ -86,14 +86,14 @@ const STARWORD = ["", "Bad", "Not great", "Okay", "Good", "Great"];
 /* ---------- state ---------- */
 let FR_MID = 3.9, D = null, V = {}, ROWS = [], ALERTS = [], RV = { stats: {}, recent: [] }, PEPS = [];
 const S = Object.assign({ q: "", cat: "All", sort: "ppu", rep: false, stock: true, coa: false, ship: false, vendor: "", strat: "rec", one: false, swaps: true, open: null }, store.get("pf_filters", {}), { q: "", cat: "All", vendor: "" });
-const saveS = () => store.set("pf_filters", { sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, strat: S.strat, one: S.one, swaps: S.swaps });
+const saveS = () => { store.set("pf_filters", { sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, fill: S.fill, strat: S.strat, one: S.one, swaps: S.swaps }); prefsDirty(); };
 let HIDE = new Set(store.get("pf_hidden", []));
 let WATCH = store.get("pf_watch", null);           // { "pep|size": {target, on, drop, restock, sale} }
 let PROT = store.get("pf_proto2", null);           // [{pep,size,qty}]
 let FOLLOW = new Set(store.get("pf_follow", []));  // vendor ids for sale alerts
 const seenAlerts = () => store.get("pf_seen_alerts", 0);
-const saveW = () => { store.set("pf_watch", WATCH); syncPush(); };
-const saveP = () => { store.set("pf_proto2", PROT); syncPush(); };
+const saveW = () => { store.set("pf_watch", WATCH); syncPush(); prefsDirty(); };
+const saveP = () => { store.set("pf_proto2", PROT); syncPush(); prefsDirty(); };
 
 function ingest(d) {
   D = d; V = {};
@@ -171,7 +171,11 @@ const live = () => ROWS.filter(r => !HIDE.has(r.v));
 // "Hide low-rated stores": flagged stores, Finnrick results under 60%, or 5+ buyer reviews averaging under 3.5.
 // Stores with no ratings at all stay in: having no data isn't a strike.
 const lowRated = v => v.tier === "mixed" || (v.finnrick_pct != null && v.finnrick_pct < 60) || (v.rvN >= 5 && v.rvAvg < 3.5);
-const vis = (rows = live()) => rows.filter(r => (!S.rep || !lowRated(V[r.v])) && (!S.stock || r.stock) && (!S.coa || (r.coa === true && r.coaState !== "reused")) && (!S.vendor || r.v === S.vendor));
+// Stores where we can put the items in the cart for you (tested by hand; verify_first = after their age check)
+const I_CART = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11h11l2-8H6.2"/><circle cx="9" cy="19.5" r="1.4"/><circle cx="17" cy="19.5" r="1.4"/><path d="M10.5 10.5l1.8 1.8 3.4-3.6"/></svg>`;
+const fillsCart = v => !!v && ["fill", "bag_link", "verify_first"].includes(v.cart_mode) && (v._ids ??= ROWS.some(r => r.v === v.id && r.cartId));
+const cartPill = v => !fillsCart(v) ? "" : `<span class="pill p-cart" title="${v.cart_mode === "verify_first" ? "We can fill your cart here after you confirm your age on their site" : "We can put your items in this store's cart for you"}">${I_CART}<span class="cp-t">Fills cart</span></span>`;
+const vis = (rows = live()) => rows.filter(r => (!S.fill || fillsCart(V[r.v])) && (!S.rep || !lowRated(V[r.v])) && (!S.stock || r.stock) && (!S.coa || (r.coa === true && r.coaState !== "reused")) && (!S.vendor || r.v === S.vendor));
 const bestOf = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) / c.sv < eff(a) / a.sv ? c : a) : null; };
 const bestPrice = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) < eff(a) ? c : a) : null; };
 const groupBy = rows => { const g = {}; rows.forEach(r => ((g[r.pep] ??= {})[r.size] ??= []).push(r)); return g; };
@@ -206,7 +210,7 @@ const mdy = d => d ? new Date(d + "T12:00").toLocaleDateString(undefined, { mont
 const coaB = (r, full) => {
   if (r.coa === true && r.coaState === "reused") return `<a class="coa bad" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(r.coaShared > 1 ? "The same report file appears at " + r.coaShared + " sellers." : "The same report file is used for more than one compound.")} Treat as unverified.">⚠ Reused?</a>`;
   if (r.coa === true && r.coaState === "outdated") return `<a class="coa old" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="Report dated ${esc(r.coaDate || "")}, more than 12 months ago">◷ Outdated${full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
-  if (r.coa === true) return `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.coaDate && "Report " + r.coaDate].filter(Boolean).join(" · "))}">COA ✓${full && r.lot ? " · Lot " + esc(r.lot) : full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
+  if (r.coa === true) return `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.coaDate && "Report " + r.coaDate].filter(Boolean).join(" · "))}">COA ✓${full && r.lot && isPro() ? " · Lot " + esc(r.lot) : full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
   if (r.coa === false) return `<span class="pill p-warn" title="We checked the product page and found no certificate of analysis">No COA</span>`;
   return "";
 };
@@ -256,11 +260,11 @@ function chrome() {
     <div class="acts"><div class="tt" role="radiogroup" aria-label="Theme"><button type="button" role="radio" aria-checked="${res === "light"}" data-theme-set="light" aria-label="Light">${I.sun}</button><button type="button" role="radio" aria-checked="${res === "dark"}" data-theme-set="dark" aria-label="Dark">${I.moon}</button></div>
     <a class="btn" href="#watchlist">${I.star} Watchlist <span class="mono t3">${Object.values(WATCH).filter(w => w.on).length}</span></a>
     <div class="bellwrap"><button class="ib" type="button" id="bell" aria-haspopup="true" aria-expanded="false" aria-label="${n} unread alerts">${I.bell}${cnt}</button><div class="dd" id="dd"></div></div>
-    <button class="btn p" type="button" data-review="">Write a review</button></div></div>`;
+    ${acctBtn("btn")}<button class="btn p" type="button" data-review="">Write a review</button></div></div>`;
   const h = (location.hash || "#home").slice(1), pushed = h.startsWith("p-") || h.startsWith("v-") || h.startsWith("s-");
   const ttl = h.startsWith("p-") ? short(PEPS.find(p => slugOf(p) === h.slice(2)) || "") : pushed ? (V[h.slice(2)]?.name || "") : "";
   $("#mtop").innerHTML = `<div class="in">${pushed ? `<button class="mib back" type="button" data-back aria-label="Back">${I.back}</button><span class="ttl">${esc(ttl)}</span>` : `<a href="#home" aria-label="PepSeekr home">${wordmark()}</a><span class="sp"></span>`}
-    <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a></div>`;
+    <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a>${acctBtn("mib")}</div>`;
   const tb = (hh, t, k, icn, extra = "") => `<a href="#${hh}" ${tab === k ? 'aria-current="page"' : ""}><i>${icn}</i>${t}${extra}</a>`;
   $("#tabbar").innerHTML = tb("home", "Index", "index", I.home) + tb("search", "Search", "search", I.search) + tb("list", "My list", "protocol", I.dl) + tb("alerts", "Alerts", "alerts", I.bell, cnt) + tb("watchlist", "Watchlist", "watchlist", I.star);
   $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything or take a cut from sellers; confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="#vendors">List your store</a> · <a href="#vendors">Suggest a seller</a> · <a href="#seller-log">Seller log</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
@@ -335,7 +339,7 @@ function catalog(limit) {
 }
 const ck = (k, t) => `<button type="button" class="ck" role="checkbox" aria-checked="${!!S[k]}" data-filt="${k}"><span class="chk">${I.check}</span>${t}</button>`;
 function filtersBar() {
-  return `<div class="card filters"><span class="lbl">Filters</span>${ck("rep", "Hide low-rated stores")}${ck("stock", "In stock only")}${ck("coa", "COA on file")}${ck("ship", "Include shipping")}
+  return `<div class="card filters"><span class="lbl">Filters</span>${ck("rep", "Hide low-rated stores")}${ck("stock", "In stock only")}${ck("coa", "COA on file")}${ck("fill", "Fills your cart")}${ck("ship", "Include shipping")}
     <div class="r"><select class="btn sm" id="vsel" aria-label="Vendor"><option value="">All vendors</option>${vendors().map(v => `<option value="${esc(v.id)}" ${S.vendor === v.id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select><button class="btn sm" type="button" data-stores>${I.store} Stores</button></div></div>`;
 }
 function ctaBand() {
@@ -404,7 +408,7 @@ function vProduct(slug) {
         <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price</span><b>${money2(b.price)}</b><span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs average" : "at average"}</span><div class="pacts">${b.stock ? `<a class="btn p lg" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy at ${esc(V[b.v].name)} ${I.ext}</a>` : `<span class="pill p-n">Out of stock everywhere</span>`}<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch"}</button><button class="btn sm" type="button" data-addlist="${esc(p)}|${esc(size)}">${PROT.some(i => i.pep === p && i.size === size) ? I.check + " On my list" : I.plus + " Add to list"}</button></div><span class="ruo" style="text-align:right">Research use only</span></div></div></div>
       <div class="sizes monly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money(lb.price) : "out"}</small></button>`; }).join("")}</div>
       ${b.v && V[b.v].promo_text ? `<div class="promo"><b><a href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener" style="text-decoration:underline">${esc(V[b.v].name)} ↗</a>: ${esc(V[b.v].promo_text)}</b><div class="hint" style="margin-top:2px">${esc((V[b.v].promo_detail || "").replace(/\.?$/, ". ").replace(/^\. $/, ""))}Prices shown are before this discount.</div></div>` : ""}
-      <div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("rep", "Hide low-rated")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>${(() => { const on = [["stock", "In stock only"], ["coa", "COA on file"], ["rep", "Hide low-rated"], ["ship", "Including shipping"]].filter(([k]) => S[k]);
+      <div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("rep", "Hide low-rated")}</span><span class="donly">${ck("fill", "Fills your cart")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>${(() => { const on = [["stock", "In stock only"], ["coa", "COA on file"], ["rep", "Hide low-rated"], ["fill", "Fills your cart"], ["ship", "Including shipping"]].filter(([k]) => S[k]);
         return on.length ? `<div class="fbar"><span class="lbl">Your filters</span>${on.map(([k, t]) => `<button class="chip sm" type="button" data-filt="${k}" aria-label="Turn off ${t}">${t} <span aria-hidden="true">✕</span></button>`).join("")}<span class="t2" style="font-size:13px">${list.length < raw.length ? `Showing ${list.length} of ${raw.length} offers.` : `All ${raw.length} offers shown.`}</span>${list.length < raw.length ? `<button class="link" type="button" data-showall>Show all</button>` : ""}</div>` : ""; })()}
         ${list.length ? `<table class="tbl offers"><thead><tr><th>Vendor</th><th>Price</th><th>$/${unitTxt(b.unit)}</th><th>COA</th><th>Rating</th><th>Shipping</th><th></th></tr></thead><tbody>${list.map(r => offerRow(r, multi && r === b)).join("")}</tbody></table>
         <ul class="ocards monly" style="padding:12px">${list.map(r => offerCard(r, multi && r === b)).join("")}</ul>` : `<div class="empty"><b>No offers match your filters</b><p>Turn off “In stock only” or “COA on file” to see every vendor.</p><button class="btn" type="button" data-clearf>Clear filters</button></div>`}</div>
@@ -420,14 +424,14 @@ function vProduct(slug) {
 function hist(rv) { const d = [5, 4, 3, 2, 1].map(s => rv.filter(r => r.stars === s).length), t = rv.length || 1; return `<div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(d[i] / t * 100)}%"></b></i><span>${d[i]}</span></div>`).join("")}</div>`; }
 function offerRow(r, best) {
   const v = V[r.v];
-  return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
+  return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
     <td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.sale ? ` <span class="pill p-sale">Sale</span>` : ""}${S.ship && shipCost(v, r.price) ? `<div class="hint">${money2(eff(r))} shipped</div>` : ""}</td>
     <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r, true) || `<span class="t3" title="Not checked yet">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}${v.finnrick_pct != null ? `<div><a class="link" href="${esc(frUrl(v))}" target="_blank" rel="noopener" title="${esc(frTitle(v))}" style="font-size:12.5px">Lab-tested ${v.finnrick_pct}% ↗</a></div>` : ""}${v.site_reviews_url ? `<div>${theirRev(v)}</div>` : ""}</td><td class="wrap-c">${esc(shipText(v))}</td>
     <td style="text-align:right"><a class="btn sm ${best ? "p" : ""}" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${r.stock ? "Buy" : "View"} ${I.ext}</a></td></tr>`;
 }
 function offerCard(r, best) {
   const v = V[r.v];
-  return `<li class="card ocard ${best ? "glow" : ""}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}</span></span></a>
+  return `<li class="card ocard ${best ? "glow" : ""}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}</span></span></a>
     <div class="bt"><span>${I.truck.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}${esc(shipText(v))}</span><span class="row" style="gap:8px">${r.sale && r.reg ? `<s class="mono">${money2(r.reg)}</s>` : ""}${coaB(r)}<span class="mono">${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : ""}</span></span></div></li>`;
 }
 const HCACHE = {};
@@ -460,7 +464,7 @@ function vVendor(id) {
   const coaRows = rows.filter(r => r.coa === true).sort((a, b) => a.pep.localeCompare(b.pep));
   const following = FOLLOW.has(id), hidden = HIDE.has(id);
   const bk = [["Reviews", v.pts.rep, 40], ["Price", v.pts.price, 30], ["COA", v.pts.coa, 20], ["Shipping", v.pts.ship, 10]];
-  return `<section class="vhero"><div class="gridbg"></div><div class="wrap in"><span class="mono-tile">${esc(v.name[0])}</span><div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>
+  return `<section class="vhero"><div class="gridbg"></div><div class="wrap in"><span class="mono-tile">${esc(v.name[0])}</span><div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${cartPill(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>
       <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
       <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Finnrick tests"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
     <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
@@ -598,20 +602,23 @@ function routePlan() {
   return { C, low, few, rec, val, nonstops, tol, swaps, one, multi };
 }
 function vProtocol() {
-  const R = routePlan(), tab = ["rec", "low", "few", "value"].includes(S.tab) ? S.tab : "rec";
+  // Free: lowest price only, no swaps, no one-seller. Pro: every route.
+  const pro = isPro(), keep = [S.swaps, S.one]; if (!pro) { S.swaps = false; S.one = false; }
+  const R = routePlan(); if (!pro) [S.swaps, S.one] = keep;
+  const tab = !pro ? "low" : ["rec", "low", "few", "value"].includes(S.tab) ? S.tab : "rec";
   const pick = { rec: R.rec, low: R.low, few: R.few, value: R.val };
-  const sel = (S.open && [R.rec, R.low, R.few, R.val, ...R.nonstops].find(r => r && r.key === S.open && r.mode === (S.openMode || "cheapest"))) || pick[tab];
+  const sel = (pro && S.open && [R.rec, R.low, R.few, R.val, ...R.nonstops].find(r => r && r.key === S.open && r.mode === (S.openMode || "cheapest"))) || pick[tab];
   const nItems = PROT.length - R.C.unavail.length;
   CUR = sel;
   const same = (a, b) => a && b && a.key === b.key && Math.abs(a.total - b.total) < 0.005;
   const tags = r => [same(r, R.rec) && "Recommended", same(r, R.low) && "Lowest price", same(r, R.few) && "Fewest stops", same(r, R.val) && "Best value"].filter(Boolean);
   // list: the picked route first, then the other named routes and up to two nonstops
   const list = []; const add = r => { if (r && !list.some(x => same(x, r))) list.push(r); };
-  add(sel); [R.rec, R.low, R.few, R.val, ...R.nonstops.slice(0, 2)].forEach(add);
+  add(sel); if (pro) [R.rec, R.low, R.few, R.val, ...R.nonstops.slice(0, 2)].forEach(add);
   const shipLine = (vid, s) => `<li><span>Shipping${s.est ? ` <span class="t3">(est.)</span>` : ""}</span><b>${s.ship ? money2(s.ship) : "Free"}</b></li>`;
   const nudge = (vid, s) => { const f = V[vid].free_ship_over != null ? +V[vid].free_ship_over : null; return f != null && s.ship && f - s.sub <= 75 ? `<div class="hint data" style="margin-top:6px">Add ${money2(f - s.sub)} more for free shipping</div>` : ""; };
   const lineTxt = a => `${esc(short(a.item.pep))} ${esc(sizeTxt(a.item.size))}${a.offer.swap ? ` <span class="swap-pill">⇄ ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))}</span>` : ""}${a.item.qty > 1 ? ` ×${a.item.qty}` : ""}`;
-  const legs = r => Object.entries(r.stores).map(([vid, s], i) => `<div class="leg"><span class="n">${i + 1}</span><div style="min-width:0"><b>${esc(V[vid].name)}</b> <span class="hint">${repTxt(V[vid])}</span><ul>${r.assign.filter(a => a.offer.v === vid).map(a => `<li><span>${lineTxt(a)}</span><b>${money2(a.offer.price * a.item.qty)}</b></li>`).join("")}${shipLine(vid, s)}</ul>${nudge(vid, s)}</div><div class="rt"><b>${money2(s.sub + s.ship)}</b>${cartBtn(vid)}<a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener" style="font-size:13px">Go to ${esc(V[vid].name)} ↗</a></div></div>`).join("");
+  const legs = r => Object.entries(r.stores).map(([vid, s], i) => `<div class="leg"><span class="n">${i + 1}</span><div style="min-width:0"><b>${esc(V[vid].name)}</b> ${cartPill(V[vid])} <span class="hint">${repTxt(V[vid])}</span><ul>${r.assign.filter(a => a.offer.v === vid).map(a => `<li><span>${lineTxt(a)}</span><b>${money2(a.offer.price * a.item.qty)}</b></li>`).join("")}${shipLine(vid, s)}</ul>${nudge(vid, s)}</div><div class="rt"><b>${money2(s.sub + s.ship)}</b>${cartBtn(vid)}<a class="link" href="${esc(V[vid].url)}" target="_blank" rel="noopener" style="font-size:13px">Go to ${esc(V[vid].name)} ↗</a></div></div>`).join("");
   const swapBox = r => r.swaps.map(a => `<div class="swapbox"><span class="sw-ic">⇄</span><span class="t"><b>${esc(short(a.item.pep))}: ${a.offer.n} × ${esc(sizeTxt(a.offer.row.size))} (${money2(a.offer.price)})</b> for ${esc(sizeTxt(a.item.size))} <span class="t3">· ${esc(V[a.offer.v].name)} doesn't sell ${esc(sizeTxt(a.item.size))}. Same compound, same total.</span></span></div>`).join("");
   const sumCard = r => `<div class="card glow sum" style="align-self:start"><div class="r"><span>Items</span><b>${money2(r.sub)}</b></div><div class="r"><span>Shipping</span><b>${money2(r.ship)}${r.est ? " est." : ""}</b></div><div class="r" style="font-size:16px"><span><b style="font-family:inherit">Total</b></span><b>${money2(r.total)}</b></div><div class="r"><span class="t2">Average, same items</span><b class="t2">${money2(r.med)}</b></div><div class="save"><span><span class="lbl">You save vs average</span><div class="hint">before shipping</div></span><b>${money2(Math.max(0, r.save))}</b></div>${r.est ? `<p class="hint">“est.” = this store shows shipping only at checkout; we assume ${money(SHIP_EST)} per store.</p>` : ""}${PROT.length ? `<a class="btn pk" href="${pkLink()}" target="_blank" rel="noopener">Ordered these? Add them to PepKeep</a><p class="hint" style="margin-top:6px">Opens PepKeep with these vials ready to set up. Only names, sizes and counts are sent.</p>` : ""}<div class="ruo">For laboratory research use only</div></div>`;
   const why = r => {
@@ -646,7 +653,7 @@ function vProtocol() {
     <div class="row" style="gap:16px;margin-top:10px"><button type="button" class="ck" role="checkbox" aria-checked="${R.swaps}" data-swaps><span class="chk">${I.check}</span>Allow size swaps</button><button type="button" class="ck" role="checkbox" aria-checked="${R.one}" data-one><span class="chk">${I.check}</span>Buy everything from one seller</button></div>`;
   return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">My list</span></span><h1 class="h1" style="margin-top:12px">Your list, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors, shipping included.` : "Check off what you need. We find the cheapest way to buy it, shipping included, from one store or several."}</p></div></div>
     <div class="imp"><button class="card itile" type="button" data-checklist><span class="hd">${I.list} Check off a list</span><span class="hint">Pick everything you need</span></button><button class="card itile" type="button" data-imp="paste"><span class="hd">${I.paste} Paste a list</span><span class="hint">Type or paste names</span></button><label class="card itile"><span class="hd">${I.file} PDF</span><span class="hint">Drop a file</span><input type="file" id="pdfIn" accept="application/pdf" aria-label="Import a PDF"></label></div>
-    ${PROT.length && sel ? `<div style="margin-top:16px">${ctl}</div>
+    ${PROT.length && sel ? `<div style="margin-top:16px">${pro ? ctl : lockedCtl(R, tabs)}</div>
     ${coverNote()}
     <div class="itins" style="margin-top:14px">${list.map(card).join("")}</div>
     ${R.C.unavail.length ? `<p class="hint warn" style="margin-top:10px">Not in stock anywhere right now: ${R.C.unavail.map(m => esc(short(m.pep)) + " " + esc(sizeTxt(m.size))).join(", ")}. Add it to your watchlist to hear when it's back.</p>` : ""}
@@ -759,7 +766,7 @@ function filterSheet() {
   const c = catCounts(), n = vis().length;
   const sw = (k, t, s) => `<button type="button" class="srow" role="switch" aria-checked="${!!S[k]}" data-filt="${k}"><span><b style="font-weight:600">${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`;
   openSheet(`<div class="shd"><h2>Filters</h2><div class="row" style="gap:4px"><button class="link" type="button" data-clearf style="min-height:44px;padding:0 8px">Reset</button><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div></div>
-    <div class="ssec"><span class="lbl">Quality</span>${sw("rep", "Hide low-rated stores", "Flagged stores, lab tests under 60%, or poor buyer reviews")}${sw("stock", "In stock only", "Hide sold-out listings")}${sw("coa", "COA on file", "Lab report linked on the listing")}${sw("ship", "Include shipping", "Add known flat shipping to prices")}</div>
+    <div class="ssec"><span class="lbl">Quality</span>${sw("rep", "Hide low-rated stores", "Flagged stores, lab tests under 60%, or poor buyer reviews")}${sw("stock", "In stock only", "Hide sold-out listings")}${sw("coa", "COA on file", "Lab report linked on the listing")}${sw("fill", "Fills your cart", "Stores where we can add your items to the cart for you")}${sw("ship", "Include shipping", "Add known flat shipping to prices")}</div>
     <div class="ssec"><span class="lbl">Category</span><div class="wrapchips">${["All", ...ALLCATS].filter(k => k === "All" || c[k]).map(k => `<button class="chip" type="button" data-cat="${esc(k)}" aria-pressed="${S.cat === k}">${esc(k)}</button>`).join("")}</div></div>
     <div class="ssec"><span class="lbl">Sort by</span><div class="seg" role="radiogroup" aria-label="Sort">${[["ppu", "$/mg"], ["score", "Score"], ["rating", "Rating"]].map(([k, t]) => `<button type="button" role="radio" data-sortopt="${k}" aria-checked="${S.sort === k}">${t}</button>`).join("")}</div></div>
     <div class="ssec"><span class="lbl">Vendors</span><button type="button" class="srow" data-stores><span><b style="font-weight:600">Stores</b><small>${HIDE.size ? HIDE.size + " hidden" : "Following all " + Object.keys(V).length}</small></span>${I.chev.replace("<svg", '<svg style="width:18px;height:18px"')}</button></div>
@@ -806,11 +813,12 @@ function legItems(r, vid) {
 }
 function cartBtn(vid) {
   const m = V[vid].cart_mode || "links", ids = CUR ? legItems(CUR, vid).some(i => i.id) : false;
+  if (m !== "links" && ids && !isPro()) return `<span class="cbtns"><button class="btn sm" type="button" data-board="${esc(vid)}">Shop this list</button>${proLock("cart", "Fill my cart")}</span>`;
   const t = m !== "links" && ids ? "Fill my cart" : "Shop this list";
   return `<button class="btn p sm" type="button" data-board="${esc(vid)}">${t}</button>`;
 }
 function boardSheet(vid) {
-  const v = V[vid], items = legItems(CUR, vid), mode = items.some(i => i.id) ? (v.cart_mode || "links") : "links";
+  const v = V[vid], items = legItems(CUR, vid), mode = items.some(i => i.id) && isPro() ? (v.cart_mode || "links") : "links";
   const auto = items.filter(i => i.id), hand = mode === "links" ? items : items.filter(i => !i.id);
   const sub = items.reduce((a, i) => a + i.price, 0);
   BOARD = { vid, mode, auto, hand, step: 0, win: null, timer: null, paused: false, done: false, sub };
@@ -1015,6 +1023,185 @@ async function pushOff() {
 }
 async function testPush() { const reg = await navigator.serviceWorker.ready; reg.showNotification("PepSeekr", { body: "Alerts are working. Deals on your list will show up here.", icon: "/icon-192.png", badge: "/icon-192.png", data: { url: "/#alerts" } }); }
 
+/* ---------- PepSeekr Pro: sign-in, account, sync, gating, upgrade ---------- */
+const FREE_WATCH = 3;
+const I_USER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.6-3.5 4.5-5 8-5s6.4 1.5 8 5"/></svg>`;
+let SBC = null, SESS = null, ME = store.get("pk_me", null), AUTH = { step: "email", email: "", busy: false, err: "" };
+function sbc() {
+  if (SBC || !window.supabase) return SBC;
+  SBC = window.supabase.createClient(SB, KEY, { auth: { flowType: "pkce", persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: "pk_auth" } });
+  return SBC;
+}
+const signedIn = () => !!SESS;
+const isPro = () => !!(ME && ME.pro) || !!ownerKey();
+async function refreshMe() {
+  if (!SESS) { ME = null; store.set("pk_me", null); return; }
+  try { const { data, error } = await sbc().rpc("pk_me"); if (!error && data) { ME = data; store.set("pk_me", ME); } } catch {}
+}
+
+/* sync: list, watchlist and filters follow the account */
+let prefsT = 0, prefsLoaded = false;
+function prefsDirty() { if (!SESS || !prefsLoaded) return; clearTimeout(prefsT); prefsT = setTimeout(pushPrefs, 1200); }
+async function pushPrefs() {
+  if (!SESS) return;
+  const data = { list: PROT, watch: WATCH, filters: store.get("pf_filters", {}), at: Date.now() };
+  try { await sbc().from("pk_prefs").upsert({ user_id: SESS.user.id, data }, { onConflict: "user_id" }); } catch {}
+}
+async function pullPrefs() {
+  if (!SESS) return;
+  try {
+    const { data } = await sbc().from("pk_prefs").select("data").eq("user_id", SESS.user.id).maybeSingle();
+    const R = data && data.data;
+    if (R) {
+      // merge: keep everything from both sides; this device wins on conflicts
+      const byK = new Map((R.list || []).map(i => [i.pep + "|" + i.size, i]));
+      PROT.forEach(i => byK.set(i.pep + "|" + i.size, Object.assign({}, byK.get(i.pep + "|" + i.size) || {}, i)));
+      PROT.splice(0, PROT.length, ...byK.values());
+      Object.keys(R.watch || {}).forEach(k => { if (!WATCH[k]) WATCH[k] = R.watch[k]; });
+      if (R.filters && !store.get("pf_filters", null)) { store.set("pf_filters", R.filters); Object.assign(S, R.filters); }
+      store.set("pf_proto2", PROT); store.set("pf_watch", WATCH);
+    }
+    prefsLoaded = true; await pushPrefs();
+  } catch { prefsLoaded = true; }
+}
+
+async function authInit() {
+  if (!window.supabase) await new Promise(r => { const el = document.getElementById("sbjs"); if (!el) return r(); el.addEventListener("load", r, { once: true }); el.addEventListener("error", r, { once: true }); setTimeout(r, 15000); });
+  const c = sbc(); if (!c) return;
+  if (location.hash === "#account") route(true);
+  try { const { data } = await c.auth.getSession(); SESS = data.session; } catch {}
+  if (SESS) { await refreshMe(); await pullPrefs(); route(true); }
+  else if (ME) { ME = null; store.set("pk_me", null); route(true); }
+  c.auth.onAuthStateChange(async (ev, s) => {
+    const was = !!SESS; SESS = s;
+    if (s && !was) { await refreshMe(); await pullPrefs(); toast(`Signed in as ${s.user.email}`); afterSignIn(); route(true); }
+    if (!s && was) { ME = null; store.set("pk_me", null); prefsLoaded = false; route(true); }
+  });
+  // back from Stripe checkout: the webhook can take a few seconds
+  if (/upgraded=1/.test(location.hash)) {
+    history.replaceState(null, "", "#account");
+    for (let i = 0; i < 8 && !(ME && ME.pro); i++) { await new Promise(r => setTimeout(r, 2000)); await refreshMe(); }
+    toast(ME && ME.pro ? "You're on Pro. Routes, swaps and cart fills are unlocked." : "Payment received. Pro turns on in a minute; refresh if it hasn't.", 6000);
+    route(true);
+  }
+  setInterval(() => { if (SESS) refreshMe(); }, 10 * 60 * 1000);
+}
+
+/* sign in with an emailed 6-digit code (works inside the home-screen app, which can't see Safari's sign-in) */
+async function sendCode(email) {
+  AUTH = { step: "email", email, busy: true, err: "" }; paintAuth();
+  const { error } = await sbc().auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: "https://pepseekr.com/#account" } });
+  AUTH = error ? { step: "email", email, busy: false, err: error.message.includes("rate") ? "Too many tries. Wait a minute and send again." : "We couldn't send the email. Check the address and try again." } : { step: "code", email, busy: false, err: "" };
+  paintAuth();
+}
+async function checkCode(code) {
+  AUTH.busy = true; AUTH.err = ""; paintAuth();
+  const { error } = await sbc().auth.verifyOtp({ email: AUTH.email, token: code, type: "email" });
+  AUTH.busy = false;
+  if (error) { AUTH.err = "That code didn't work. Check the newest email, or send a new code."; paintAuth(); return; }
+  AUTH = { step: "email", email: "", busy: false, err: "" };
+  if ($("#sheet").classList.contains("open") && $("#authBox")) closeSheet?.();
+}
+function authForm() {
+  const A = AUTH;
+  if (A.step === "code") return `<form id="codeForm" class="authf"><p class="t2">We sent a 6-digit code to <b>${esc(A.email)}</b>. Enter it here, or tap the link in the email.</p>
+    <input id="authCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" aria-label="6-digit code" class="authin mono" required>
+    ${A.err ? `<p class="warn" role="alert">${esc(A.err)}</p>` : ""}
+    <div class="row" style="gap:10px;justify-content:space-between"><button class="link" type="button" data-authback>Use a different email</button><button class="btn p" type="submit" ${A.busy ? "disabled" : ""}>${A.busy ? "Checking…" : "Sign in"}</button></div></form>`;
+  return `<form id="emailForm" class="authf"><label class="lbl" for="authEmail">Email</label>
+    <input id="authEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${esc(A.email)}" class="authin" required>
+    ${A.err ? `<p class="warn" role="alert">${esc(A.err)}</p>` : ""}
+    <button class="btn p" type="submit" style="width:100%" ${A.busy ? "disabled" : ""}>${A.busy ? "Sending…" : "Email me a sign-in code"}</button>
+    <p class="hint">No password. New here? This makes your free account.</p></form>`;
+}
+function paintAuth() { const b = $("#authBox"); if (b) { b.innerHTML = authForm(); ($("#authCode") || $("#authEmail"))?.focus(); } }
+function signInSheet(why) {
+  AUTH.err = "";
+  openSheet(`<div class="shd"><h2>Sign in to PepSeekr</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
+    <p class="t2" style="margin-top:4px">${esc(why || "Keep your list and watchlist on every device.")}</p><div id="authBox" style="margin-top:14px">${authForm()}</div>`, "Sign in");
+  setTimeout(paintAuth, 30);
+}
+
+/* upgrade */
+const PRO_PERKS = [
+  ["Every route", "Recommended, fewest stops and best value, not just the lowest price"],
+  ["Size swaps", "Two 5 mg vials when they beat one 10 mg, worked out for you"],
+  ["Fill my cart", "We put your items in the store's cart so you just check out"],
+  ["Unlimited watchlist", `Free watches up to ${FREE_WATCH} vials`],
+  ["Lab report details", "Lot numbers, lab names and test dates on every COA"]
+];
+const WHY = { routes: "Compare every way to buy your list.", swaps: "Let us swap sizes when two small vials beat one big one.", cart: "Let us fill your cart at this store.", watch: `Free accounts watch up to ${FREE_WATCH} vials. Pro watches as many as you like.`, lot: "See lot numbers, labs and test dates.", one: "Buy everything from one seller." };
+let PENDING_PLAN = null;
+function upgradeSheet(reason) {
+  openSheet(`<div class="shd"><h2>PepSeekr Pro</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
+    <p class="t2" style="margin-top:4px">${esc(WHY[reason] || "Find the cheapest way to buy everything on your list.")}</p>
+    <ul class="perks">${PRO_PERKS.map(([b, t]) => `<li>${I.check}<span><b>${esc(b)}</b> ${esc(t)}</span></li>`).join("")}</ul>
+    <div class="plans"><button class="plan" type="button" data-plan="year"><span class="pl">Yearly</span><b>$79</b><span class="hint">$6.58 a month · save 34%</span></button>
+    <button class="plan" type="button" data-plan="month"><span class="pl">Monthly</span><b>$9.99</b><span class="hint">Cancel anytime</span></button></div>
+    <p class="hint" style="margin-top:12px">Billed by Stripe. Cancel from your account page in two taps. PepSeekr doesn't sell peptides or take a cut from sellers.</p>`, "PepSeekr Pro");
+}
+async function billing(action, plan) {
+  if (!SESS) { PENDING_PLAN = plan || "portal"; signInSheet("Sign in first, then you'll go straight to checkout."); return; }
+  toast(action === "portal" ? "Opening billing…" : "Opening secure checkout…", 6000);
+  try {
+    const r = await fetch(`${SB}/functions/v1/pk-billing`, { method: "POST", headers: { apikey: KEY, Authorization: "Bearer " + SESS.access_token, "Content-Type": "application/json" }, body: JSON.stringify({ action, plan }) });
+    const j = await r.json().catch(() => ({}));
+    if (j.url) { location.href = j.url; return; }
+    toast(j.error === "already_pro" ? "You're already on Pro." : "Checkout isn't available yet. Try again in a bit.", 5000);
+  } catch { toast("Couldn't reach checkout. Check your connection and try again.", 5000); }
+}
+function afterSignIn() { const p = PENDING_PLAN; PENDING_PLAN = null; if (!p) return; if (p === "portal") billing("portal"); else if (!isPro()) billing("checkout", p); }
+
+/* gating helpers used by the views */
+const proLock = (reason, label) => `<button class="btn sm lockb" type="button" data-upgrade="${reason}">${I_LOCK}${esc(label)}</button>`;
+const I_LOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
+function watchAllowed() { return isPro() || Object.values(WATCH).filter(w => w.on).length < FREE_WATCH; }
+
+/* account page */
+function vAccount() {
+  const tag = `<div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">Account</span></span><h1 class="h1" style="margin-top:12px">${SESS ? "Your account" : "Sign in"}</h1></div></div>`;
+  if (!window.supabase) return `<div class="wrap">${tag}<div class="card empty"><b>Sign-in didn't load</b><p>Check your connection and refresh the page.</p></div></div>`;
+  if (!SESS) return `<div class="wrap">${tag}<div class="acct"><div class="card" style="padding:20px"><p class="t2">Sign in to keep your list, watchlist and filters on every device.</p><div id="authBox" style="margin-top:14px">${authForm()}</div></div>${proCard()}</div></div>`;
+  const pro = isPro(), src = ME && ME.source, until = ME && ME.until ? mdy(String(ME.until).slice(0, 10)) : "";
+  const plan = pro ? (src === "owner" || (!ME?.pro && ownerKey()) ? "Pro (owner)" : ME?.status === "past_due" ? "Pro · payment due" : ME?.status === "canceled" || ME?.cancel ? `Pro until ${until}` : `Pro${until ? " · renews " + until : ""}`) : "Free";
+  return `<div class="wrap">${tag}<div class="acct">
+    <div class="card" style="padding:20px;display:grid;gap:14px">
+      <div class="r2"><span class="t3">Signed in as</span><b>${esc(SESS.user.email)}</b></div>
+      <div class="r2"><span class="t3">Plan</span><b>${esc(plan)}</b></div>
+      <div class="r2"><span class="t3">Synced</span><span>${PROT.length} list item${PROT.length === 1 ? "" : "s"} · ${Object.values(WATCH).filter(w => w.on).length} watched</span></div>
+      ${ME?.status === "past_due" ? `<p class="warn">Your last payment didn't go through. Update your card to keep Pro.</p>` : ""}
+      <div class="row" style="gap:10px;flex-wrap:wrap">${ME?.has_billing ? `<button class="btn" type="button" data-billing>Manage billing</button>` : ""}<button class="btn" type="button" data-signout>Sign out</button></div>
+    </div>
+    ${pro ? `<div class="card" style="padding:20px"><b>Pro is on</b><ul class="perks">${PRO_PERKS.map(([b]) => `<li>${I.check}<span>${esc(b)}</span></li>`).join("")}</ul></div>` : proCard()}
+  </div></div>`;
+}
+const proCard = () => `<div class="card glow" style="padding:20px"><b style="font-size:17px">PepSeekr Pro</b><ul class="perks">${PRO_PERKS.map(([b, t]) => `<li>${I.check}<span><b>${esc(b)}</b> ${esc(t)}</span></li>`).join("")}</ul>
+  <div class="plans"><button class="plan" type="button" data-plan="year"><span class="pl">Yearly</span><b>$79</b><span class="hint">save 34%</span></button><button class="plan" type="button" data-plan="month"><span class="pl">Monthly</span><b>$9.99</b><span class="hint">cancel anytime</span></button></div></div>`;
+const acctBtn = (cls) => `<a class="${cls}" href="#account" aria-label="${SESS ? "Account" : "Sign in"}">${I_USER}${cls === "btn" ? `<span>${SESS ? (isPro() ? "Pro" : "Account") : "Sign in"}</span>` : ""}</a>`;
+
+/* events */
+document.addEventListener("click", e => {
+  const t = e.target;
+  const up = t.closest("[data-upgrade]"); if (up) { e.preventDefault(); e.stopPropagation(); upgradeSheet(up.dataset.upgrade); return; }
+  const pl = t.closest("[data-plan]"); if (pl) { e.preventDefault(); billing("checkout", pl.dataset.plan); return; }
+  if (t.closest("[data-billing]")) { e.preventDefault(); billing("portal"); return; }
+  if (t.closest("[data-signout]")) { e.preventDefault(); sbc()?.auth.signOut(); toast("Signed out. Your list stays on this device."); return; }
+  if (t.closest("[data-authback]")) { e.preventDefault(); AUTH = { step: "email", email: AUTH.email, busy: false, err: "" }; paintAuth(); return; }
+}, true);
+document.addEventListener("submit", e => {
+  if (e.target.id === "emailForm") { e.preventDefault(); const v = $("#authEmail").value.trim(); if (v) sendCode(v); }
+  if (e.target.id === "codeForm") { e.preventDefault(); const v = $("#authCode").value.replace(/\D/g, ""); if (v.length === 6) checkCode(v); else { AUTH.err = "Enter all 6 digits."; paintAuth(); } }
+});
+document.addEventListener("input", e => { if (e.target.id === "authCode" && e.target.value.replace(/\D/g, "").length === 6 && !AUTH.busy) checkCode(e.target.value.replace(/\D/g, "")); });
+
+/* free users see the lowest-price route; the other routes and options show as locked */
+function lockedCtl(R, tabs) {
+  return `<div class="rtabs" role="group" aria-label="Route">${tabs.map(([k, t, r]) => k === "low"
+      ? `<button class="chip" type="button" aria-pressed="true">${t}${r ? ` <span class="mono">${money2(r.total)}</span>` : ""}</button>`
+      : `<button class="chip locked" type="button" data-upgrade="routes" aria-label="${t}, Pro">${I_LOCK}${t}</button>`).join("")}</div>
+    <div class="row donly" style="gap:16px;margin-top:10px"><button type="button" class="ck locked" data-upgrade="swaps">${I_LOCK}Allow size swaps</button><button type="button" class="ck locked" data-upgrade="one">${I_LOCK}Buy everything from one seller</button></div>
+    <p class="hint" style="margin-top:8px">Free shows the lowest price. <button class="link" type="button" data-upgrade="routes">Pro compares every route and size swap</button>.</p>`;
+}
 
 function reviewItem(r, withVendor) {
   const v = V[r.v];
@@ -1062,6 +1249,7 @@ function toast(m, ms = 3200) { const t = $("#toast"); t.textContent = m; t.style
 function toggleWatch(p, s) {
   const k = p + "|" + s, w = WATCH[k];
   if (w?.on) { w.on = false; toast(`Stopped watching ${short(p)} ${sizeTxt(s)}`); }
+  else if (!watchAllowed()) { upgradeSheet("watch"); return; }
   else { WATCH[k] = Object.assign({ target: null, drop: true, restock: true, sale: true }, w || {}, { on: true }); toast(`Watching ${short(p)} ${sizeTxt(s)}. We'll alert you on sales and drops.`); }
   saveW(); route(true);
 }
@@ -1112,7 +1300,7 @@ function route(keepScroll) {
   if (h === "alerts" || h === "watchlist") { if (lastRoute !== "alerts" && lastRoute !== "watchlist") openedAt = seenAlerts(); }
   const y = scrollY; closeDD();
   chrome();
-  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : vHome();
+  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : vHome();
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
   if (h.startsWith("p-")) buyBar();
@@ -1154,7 +1342,7 @@ document.addEventListener("click", async e => {
     return;
   }
   const fl = t.closest("[data-filt]"); if (fl) { S[fl.dataset.filt] = !S[fl.dataset.filt]; saveS(); $$(`[data-filt="${fl.dataset.filt}"]`).forEach(x => x.setAttribute("aria-checked", S[fl.dataset.filt])); if ($("#sheet").classList.contains("open")) { const b = $("#sheet .sfoot .btn.p"); if (b) b.textContent = `Show ${vis().length} offers`; refreshGrid(); } else route(true); return; }
-  if (t.closest("[data-clearf]")) { Object.assign(S, { rep: false, stock: false, coa: false, ship: false, vendor: "", cat: "All", q: "" }); saveS(); if ($("#sheet").classList.contains("open")) filterSheet(); route(true); return; }
+  if (t.closest("[data-clearf]")) { Object.assign(S, { rep: false, stock: false, coa: false, fill: false, ship: false, vendor: "", cat: "All", q: "" }); saveS(); if ($("#sheet").classList.contains("open")) filterSheet(); route(true); return; }
   const so = t.closest("[data-sortopt]"); if (so) { S.sort = so.dataset.sortopt; saveS(); $$("[data-sortopt]").forEach(x => x.setAttribute("aria-checked", x === so)); refreshGrid(); return; }
   if (t.closest("[data-filters]")) { filterSheet(); return; }
   if (t.closest("[data-stores]")) { storesSheet(); return; }
@@ -1184,7 +1372,7 @@ document.addEventListener("click", async e => {
   const bd = t.closest("[data-board]"); if (bd) { boardSheet(bd.dataset.board); return; }
   if (t.closest("[data-boardgo]")) { boardGo(); return; }
   if (t.closest("[data-boardopen]")) { boardOpen(); return; }
-  if (t.closest("[data-showall]")) { S.stock = false; S.coa = false; S.rep = false; S.vendor = ""; saveS(); route(true); return; }
+  if (t.closest("[data-showall]")) { S.stock = false; S.coa = false; S.rep = false; S.fill = false; S.vendor = ""; saveS(); route(true); return; }
   if (t.closest("[data-chkmore]")) { S.chkMore = true; const r = document.getElementById("chkRes"); if (r) r.innerHTML = chkRes(""); return; }
   const st = t.closest("[data-strat]"); if (st) { S.tab = st.dataset.strat; S.open = null; route(true); return; }
   if (t.closest("[data-swaps]")) { S.swaps = S.swaps === false; S.open = null; saveS(); route(true); return; }
@@ -1303,6 +1491,7 @@ function paintFresh() {
   if (c) { ingest(c.d); route(); }
   else $("#view").innerHTML = `<div class="wrap"><div class="empty" style="margin-top:60px"><span class="dot"></span><p>Loading vendors and prices…</p></div></div>`;
   load();
+  authInit();
   setInterval(() => { if (document.visibilityState === "visible") load(); }, 10 * 60 * 1000);
   setInterval(paintFresh, 30 * 1000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && D && Date.now() - Date.parse(store.get("pf_cache", {}).at || 0) > 5 * 60 * 1000) load(); });
