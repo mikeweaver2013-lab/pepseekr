@@ -844,3 +844,8 @@ dl.pol dt{color:var(--text-3)}
 .seo-form input,.seo-form select,.seo-form textarea{font:inherit;font-weight:400;font-size:16px;border:1px solid var(--border-2);border-radius:12px;background:var(--surface);color:var(--text);padding:11px 12px}
 .seo-form button{justify-self:start}
 .msg{padding:12px 0;border-top:1px solid var(--border)}.msg:first-of-type{border-top:0}
+/* the store you came from, highlighted on the product page */
+tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset 3px 0 0 var(--brand)}
+.ocard.focus{box-shadow:0 0 0 2px var(--brand)}
+@media (prefers-reduced-motion:no-preference){tr.focus td,.ocard.focus{animation:fpulse 1.6s ease-out 1}}
+@keyframes fpulse{0%{background:var(--brand-a28)}100%{}}

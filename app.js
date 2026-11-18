@@ -227,6 +227,9 @@ const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.
 const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
 const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
 const inProt = p => PROT.some(i => i.pep === p);
+// link to a product page opened on one size, with one store's offer highlighted: #p-slug?s=15mg&v=puratek
+const pHref = (pep, size, vid) => "#p-" + slugOf(pep) + (size || vid ? "?" + [size && "s=" + encodeURIComponent(size), vid && "v=" + encodeURIComponent(vid)].filter(Boolean).join("&") : "");
+let FOCUS_V = null;
 // per-vial drop threshold for in-app alerts (default 15%); a dollar target, if set, also counts
 const DEF_PCT = 15;
 const wPct = k => (WATCH[k] && WATCH[k].pct) || DEF_PCT;
@@ -302,7 +305,7 @@ const rowFor = (a) => ROWS.find(r => r.v === a.v && r.pep === a.pep && r.size ==
 function delta(a) { if (a.kind === "restock" || !a.old || a.old <= a.now) return a.kind === "restock" ? `<span class="d data">▲ In stock</span>` : ""; return `<span class="d sale">▼ −${Math.round((1 - a.now / a.old) * 100)}%</span>`; }
 function alertCard(a) {
   const k = KIND[a.kind] || ["Update", "p-n"];
-  return `<a class="card acard" href="#p-${slugOf(a.pep)}"><span class="vwell" style="height:58px">${vial(a.pep, a.size, 52)}</span><span style="min-width:0"><span class="pill ${k[1]}">${k[0]}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="px">${money2(a.now)}${a.old && a.old > a.now ? `<s>${money2(a.old)}</s>` : ""}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span></a>`;
+  return `<a class="card acard" href="${pHref(a.pep, a.size, a.v)}"><span class="vwell" style="height:58px">${vial(a.pep, a.size, 52)}</span><span style="min-width:0"><span class="pill ${k[1]}">${k[0]}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="px">${money2(a.now)}${a.old && a.old > a.now ? `<s>${money2(a.old)}</s>` : ""}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span></a>`;
 }
 function ctxTag(a) {
   const w = WATCH[a.pep + "|" + a.size];
@@ -315,7 +318,7 @@ function ctxTag(a) {
 function alertItem(a, since, compact) {
   const k = KIND[a.kind] || ["Update", "p-n"], un = Date.parse(a.at) > since;
   if (a.kind === "promo") return `<a class="ai ${un ? "unread" : ""}" href="#v-${esc(a.v)}"><span class="ud"></span><span class="vwell vw">${avatar(V[a.v])}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}</span>${ctxTag(a)}</span><div class="nm">${esc(a.note || V[a.v].promo_text || "Store-wide sale")}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span>${compact ? "" : `<span class="rt"></span>`}</a>`;
-  return `<a class="ai ${un ? "unread" : ""}" href="#p-${slugOf(a.pep)}"><span class="ud"></span><span class="vwell vw">${vial(a.pep, a.size, 50)}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}${a.kind === "drop" && dropOf(a) > 0 ? " " + dropOf(a) + "%" : ""}</span>${ctxTag(a)}${a.kind === "drop" && bestPrice(live().filter(r => r.pep === a.pep && r.size === a.size))?.v === a.v ? `<span class="pill p-brand">Now the cheapest</span>` : ""}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span><span class="rt">${a.old && a.old !== a.now ? `<span class="t3">${money2(a.old)}</span> → ` : ""}<b>${money2(a.now)}</b> ${delta(a)}</span></a>`;
+  return `<a class="ai ${un ? "unread" : ""}" href="${pHref(a.pep, a.size, a.v)}"><span class="ud"></span><span class="vwell vw">${vial(a.pep, a.size, 50)}</span><span style="min-width:0"><span class="row" style="gap:6px"><span class="pill ${k[1]}">${k[0]}${a.kind === "drop" && dropOf(a) > 0 ? " " + dropOf(a) + "%" : ""}</span>${ctxTag(a)}${a.kind === "drop" && bestPrice(live().filter(r => r.pep === a.pep && r.size === a.size))?.v === a.v ? `<span class="pill p-brand">Now the cheapest</span>` : ""}</span><div class="nm">${esc(short(a.pep))} · ${esc(sizeTxt(a.size))}</div><div class="hint">${esc(V[a.v].name)} · ${ago(a.at)}</div></span><span class="rt">${a.old && a.old !== a.now ? `<span class="t3">${money2(a.old)}</span> → ` : ""}<b>${money2(a.now)}</b> ${delta(a)}</span></a>`;
 }
 function dealsList(n) {
   const g = groupBy(vis(live().filter(r => V[r.v].rating >= 3.5))), out = [];
@@ -424,6 +427,8 @@ function vProduct(slug) {
   const overall = bestOf(all) || all[0];
   const size = curSize[p] && g[curSize[p]] ? curSize[p] : overall.size;
   const raw = g[size], list = vis(raw).sort((a, b) => (b.stock - a.stock) || eff(a) - eff(b));
+  // the store you came from stays in the table even if a filter would hide it
+  if (FOCUS_V && !list.some(r => r.v === FOCUS_V)) { const fr = raw.find(r => r.v === FOCUS_V); if (fr) list.push(fr); }
   const b = bestPrice(list) || bestPrice(raw) || raw[0], nV = new Set(all.map(r => r.v)).size;
   const pct = Math.round((1 - b.price / b.med) * 100), w = WATCH[p + "|" + size] || {};
   const rv = RV.recent.filter(r => r.pep === p), avg = rv.length ? rv.reduce((a, r) => a + r.stars, 0) / rv.length : 0;
@@ -453,14 +458,14 @@ function vProduct(slug) {
 function hist(rv) { const d = [5, 4, 3, 2, 1].map(s => rv.filter(r => r.stars === s).length), t = rv.length || 1; return `<div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(d[i] / t * 100)}%"></b></i><span>${d[i]}</span></div>`).join("")}</div>`; }
 function offerRow(r, best) {
   const v = V[r.v];
-  return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
+  return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"} ${FOCUS_V === r.v ? "focus" : ""}" data-ov="${esc(r.v)}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
     <td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.sale ? ` <span class="pill p-sale">Sale</span>` : ""}${S.ship && shipCost(v, r.price) ? `<div class="hint">${money2(eff(r))} shipped</div>` : ""}</td>
     <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r, true) || `<span class="t3" title="Not checked yet">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}${v.finnrick_pct != null ? `<div><a class="link" href="${esc(frUrl(v))}" target="_blank" rel="noopener" title="${esc(frTitle(v))}" style="font-size:12.5px">Lab-tested ${v.finnrick_pct}% ↗</a></div>` : ""}${v.site_reviews_url ? `<div>${theirRev(v)}</div>` : ""}</td><td class="wrap-c">${esc(shipText(v))}</td>
     <td style="text-align:right"><a class="btn sm ${best ? "p" : ""}" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${r.stock ? "Buy" : "View"} ${I.ext}</a></td></tr>`;
 }
 function offerCard(r, best) {
   const v = V[r.v];
-  return `<li class="card ocard ${best ? "glow" : ""}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}</span></span></a>
+  return `<li class="card ocard ${best ? "glow" : ""} ${FOCUS_V === r.v ? "focus" : ""}" data-ov="${esc(r.v)}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}</span></span></a>
     <div class="bt"><span>${I.truck.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}${esc(shipText(v))}</span><span class="row" style="gap:8px">${r.sale && r.reg ? `<s class="mono">${money2(r.reg)}</s>` : ""}${coaB(r)}<span class="mono">${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : ""}</span></span></div></li>`;
 }
 const HCACHE = {};
@@ -500,8 +505,8 @@ function vVendor(id) {
   <div class="wrap"><div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
     ${v.promo_text ? `<div class="promo" style="margin:0"><b>${esc(v.promo_text)}</b><div class="hint" style="margin-top:2px">${esc(v.promo_detail || "")}${v.promo_ends ? " Ends " + new Date(v.promo_ends).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + "." : ""} Prices on PepSeekr are before this discount.</div></div>` : ""}
     <div class="card"><div class="phd"><div><span class="lbl">Listings</span><h3 style="font-size:17px;margin-top:4px">Best prices at ${esc(v.name)}</h3></div><span class="mono t3" style="font-size:12px">sorted by vs average</span></div>
-      <table class="tbl offers"><thead><tr><th>Peptide</th><th>Price</th><th>$/mg</th><th>vs average</th><th>COA</th><th></th></tr></thead><tbody>${listings.slice(0, 40).map(r => { const d = Math.round((r.vsMed - 1) * 100); return `<tr class="${r.stock ? "" : "oos"}"><td><a href="#p-${slugOf(r.pep)}"><b>${esc(r.pep)}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></a></td><td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}</td><td class="mono">${money2(r.ppu)}</td><td class="mono ${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td><button class="watch" style="position:static" type="button" data-watch="${esc(r.pep)}" data-size="${esc(r.size)}" aria-pressed="${isW(r.pep, r.size)}" aria-label="Watch ${esc(r.pep)} ${esc(r.size)}">${I.star}</button></td></tr>`; }).join("")}</tbody></table>
-      <ul class="ocards monly" style="padding:12px">${listings.slice(0, 20).map(r => `<li class="card ocard"><a class="t" href="#p-${slugOf(r.pep)}"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))}</b><span class="hint" style="display:block">${esc(sizeTxt(r.size))}</span></span><span class="px"><b>${money2(r.price)}</b><span class="${r.vsMed < 1 ? "data" : ""}">${r.vsMed < 1 ? "−" + Math.round((1 - r.vsMed) * 100) + "% vs average" : money2(r.ppu) + "/mg"}</span></span></a></li>`).join("")}</ul></div>
+      <table class="tbl offers"><thead><tr><th>Peptide</th><th>Price</th><th>$/mg</th><th>vs average</th><th>COA</th><th></th></tr></thead><tbody>${listings.slice(0, 40).map(r => { const d = Math.round((r.vsMed - 1) * 100); return `<tr class="${r.stock ? "" : "oos"}"><td><a href="${pHref(r.pep, r.size, r.v)}"><b>${esc(r.pep)}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></a></td><td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}</td><td class="mono">${money2(r.ppu)}</td><td class="mono ${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td><button class="watch" style="position:static" type="button" data-watch="${esc(r.pep)}" data-size="${esc(r.size)}" aria-pressed="${isW(r.pep, r.size)}" aria-label="Watch ${esc(r.pep)} ${esc(r.size)}">${I.star}</button></td></tr>`; }).join("")}</tbody></table>
+      <ul class="ocards monly" style="padding:12px">${listings.slice(0, 20).map(r => `<li class="card ocard"><a class="t" href="${pHref(r.pep, r.size, r.v)}"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))}</b><span class="hint" style="display:block">${esc(sizeTxt(r.size))}</span></span><span class="px"><b>${money2(r.price)}</b><span class="${r.vsMed < 1 ? "data" : ""}">${r.vsMed < 1 ? "−" + Math.round((1 - r.vsMed) * 100) + "% vs average" : money2(r.ppu) + "/mg"}</span></span></a></li>`).join("")}</ul></div>
     <div class="card panel"><div class="bar"><h3>Verified buyer reviews</h3><button class="btn sm p" type="button" data-review="${esc(id)}">Review ${esc(v.name)}</button></div>
       <div class="row" style="margin:12px 0 4px;gap:8px">${[["recent", "Most recent"], ["5", "5★"], ["ship", "Shipping"], ["coa", "COA match"]].map(([k, t]) => `<button class="chip" type="button" data-vrf="${k}" aria-pressed="${vrf === k}">${t}</button>`).join("")}</div>
       ${v.rvN ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${v.rvAvg.toFixed(1)}</b><div>${stars(v.rvAvg)}<div class="hint">${v.rvN} verified</div></div></div><div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(dist[i] / tot * 100)}%"></b></i><span>${dist[i]}</span></div>`).join("")}</div>` : ""}
@@ -544,7 +549,7 @@ function vCoa() {
   return `<div class="wrap">${sec("", "COA library", "Lab reports, by vial", `${live().filter(r => r.coa === true).length} listings with a COA on file`)}
     <p class="t2" style="max-width:70ch;margin-top:-6px">Listings where the vendor links a certificate of analysis on the product page. Reports live on each vendor's site; check the lot matches what ships.</p>
     <div class="hs row" style="margin:16px 0;flex-wrap:nowrap;overflow-x:auto"><button class="chip" type="button" data-coav="" aria-pressed="${!coaV}">All vendors</button>${vs.map(v => `<button class="chip" type="button" data-coav="${esc(v.id)}" aria-pressed="${coaV === v.id}">${esc(v.name)} <span class="mono t3">${coaPctTxt(v)}</span></button>`).join("")}</div>
-    <div class="card">${rows.length ? `<table class="tbl offers"><thead><tr><th>Peptide</th><th>Size</th><th>Vendor</th><th>Price</th><th>COA</th></tr></thead><tbody>${rows.slice(0, 300).map(r => `<tr><td><a href="#p-${slugOf(r.pep)}"><b>${esc(r.pep)}</b></a></td><td class="mono">${esc(sizeTxt(r.size))}</td><td><a href="#v-${esc(r.v)}">${esc(V[r.v].name)}</a></td><td class="mono">${money2(r.price)}</td><td>${coaB(r, true)}</td></tr>`).join("")}</tbody></table>
+    <div class="card">${rows.length ? `<table class="tbl offers"><thead><tr><th>Peptide</th><th>Size</th><th>Vendor</th><th>Price</th><th>COA</th></tr></thead><tbody>${rows.slice(0, 300).map(r => `<tr><td><a href="${pHref(r.pep, r.size, r.v)}"><b>${esc(r.pep)}</b></a></td><td class="mono">${esc(sizeTxt(r.size))}</td><td><a href="#v-${esc(r.v)}">${esc(V[r.v].name)}</a></td><td class="mono">${money2(r.price)}</td><td>${coaB(r, true)}</td></tr>`).join("")}</tbody></table>
       <ul class="ocards monly" style="padding:12px">${rows.slice(0, 120).map(r => `<li class="card ocard"><a class="t" href="${esc(r.url || V[r.v].url)}" target="_blank" rel="noopener"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))} · ${esc(sizeTxt(r.size))}</b><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="coa">PDF ↗</span></a></li>`).join("")}</ul>` : `<div class="empty"><span class="ei">${I.file}</span><b>No lab reports linked for this vendor</b><p>Pick another vendor, or check their site directly.</p></div>`}</div></div>`;
 }
 
@@ -776,7 +781,7 @@ function watchlist() {
   if (!ks.length) return `<div class="card empty"><span class="ei">${I.star}</span><b>Nothing on your watchlist yet</b><p>Tap ☆ on any vial to track its price.</p><a class="btn" href="#search">Browse the catalog</a></div>`;
   return `<div class="card wl"><div class="wr donly" style="padding-top:10px;padding-bottom:10px"><span class="lbl">Peptide</span><span class="lbl">Best now</span><span class="lbl tgc">Alert at</span><span class="lbl spk">30 days</span><span></span></div>${ks.map(k => {
     const [p, s] = k.split("|"), w = WATCH[k], b = bestPrice(live().filter(r => r.pep === p && r.size === s)), hit = w.target && b && b.price <= w.target;
-    return `<div class="wr"><a href="#p-${slugOf(p)}" class="row" style="gap:10px;flex-wrap:nowrap;min-width:0"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(p, s, 42)}</span><span style="min-width:0"><b style="font-weight:600">${esc(short(p))}</b> <span class="mono t3">${esc(sizeTxt(s))}</span><span class="hint" style="display:block">${b ? esc(V[b.v].name) : "Out of stock"}</span></span></a>
+    return `<div class="wr"><a href="${pHref(p, s)}" class="row" style="gap:10px;flex-wrap:nowrap;min-width:0"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(p, s, 42)}</span><span style="min-width:0"><b style="font-weight:600">${esc(short(p))}</b> <span class="mono t3">${esc(sizeTxt(s))}</span><span class="hint" style="display:block">${b ? esc(V[b.v].name) : "Out of stock"}</span></span></a>
       <span class="mono"><b>${b ? money2(b.price) : "—"}</b>${hit ? ` <span class="pill p-brand">Hit</span>` : ""}</span>
       <button type="button" class="chip sm pctchip tgc" data-pctopen="${esc(k)}" aria-label="Drop alert for ${esc(p)} ${esc(s)}: ${wPct(k)}%${w.target ? " or " + money2(w.target) : ""}. Change">↓${wPct(k)}%${w.target ? ` · ${money2(w.target)}` : ""}</button>
       <span class="spk" data-spark="${esc(k)}"></span>
@@ -916,7 +921,7 @@ function vSales() {
     ${promos.length ? `<div class="card panel"><h3>Store-wide sales and codes</h3><div class="promos-l">${promos.map(v => `<a class="pr-row" href="#v-${esc(v.id)}">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="hint">${esc(v.promo_text)}</span></span>${I.chev}</a>`).join("")}</div></div>` : ""}
     <div class="row" style="gap:8px;margin:16px 0 10px;flex-wrap:wrap"><span class="lbl">Sort</span>${[["off", "Biggest % off"], ["price", "Lowest price"], ["mg", "Lowest $/mg"]].map(([k, t]) => `<button class="chip sm" type="button" data-salesort="${k}" aria-pressed="${sort === k}">${t}</button>`).join("")}</div>
     ${cats.length > 1 ? `<div class="hs row" style="gap:8px;flex-wrap:nowrap;margin-bottom:12px"><button class="chip sm" type="button" data-salecat="" aria-pressed="${!cat}">All</button>${cats.map(c => `<button class="chip sm" type="button" data-salecat="${esc(c)}" aria-pressed="${cat === c}">${esc(c)}</button>`).join("")}</div>` : ""}
-    ${list.length ? `<div class="card sales">${list.slice(0, 120).map(r => `<a class="salerow" href="#p-${slugOf(r.pep)}"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(r.pep, r.size, 42)}</span><span style="min-width:0"><b>${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="mono sp"><s class="t3">${money2(r.reg)}</s> <b>${money2(r.price)}</b></span><span class="pill p-sale">${r.off}% off</span></a>`).join("")}</div>`
+    ${list.length ? `<div class="card sales">${list.slice(0, 120).map(r => `<a class="salerow" href="${pHref(r.pep, r.size, r.v)}"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(r.pep, r.size, 42)}</span><span style="min-width:0"><b>${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="mono sp"><s class="t3">${money2(r.reg)}</s> <b>${money2(r.price)}</b></span><span class="pill p-sale">${r.off}% off</span></a>`).join("")}</div>`
       : `<div class="card empty"><b>No vials are marked down right now</b><p>Sales show up here within 2 hours of a store starting one. Watch a vial to get an alert.</p><a class="btn" href="#search">Browse peptides</a></div>`}
     ${signupBox("sales")}</div>`;
 }
@@ -1471,6 +1476,7 @@ const pkLink = () => {
 function route(keepScroll) {
   if (!D) return;
   linkAdd();
+  const hq = new URLSearchParams((location.hash.split("?")[1]) || "");
   let h = (location.hash || "").slice(1).split("?")[0] || (document.getElementById("seo")?.dataset.route === "doc" ? "doc" : "home");
   if (h.startsWith("s-")) h = "v-" + h.slice(2);
   if (h === "sellers") h = "vendors";
@@ -1478,6 +1484,11 @@ function route(keepScroll) {
   if (h === "alerts" || h === "watchlist") { if (lastRoute !== "alerts" && lastRoute !== "watchlist") openedAt = seenAlerts(); }
   const y = scrollY; closeDD();
   chrome();
+  if (h.startsWith("p-") && !keepScroll) {
+    const pep = PEPS.find(x => slugOf(x) === h.slice(2));
+    if (pep && hq.get("s")) curSize[pep] = hq.get("s");
+    FOCUS_V = hq.get("v") || null;
+  } else if (!h.startsWith("p-")) FOCUS_V = null;
   const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : h === "sales" ? vSales() : h === "doc" ? vDoc() : vHome();
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
@@ -1494,6 +1505,7 @@ function route(keepScroll) {
   trackView();
   const pv = $("[data-pep]");
   if (pv) drawChart(pv.dataset.pep, pv.dataset.size);
+  if (pv && FOCUS_V && !keepScroll) setTimeout(() => { const el = [...document.querySelectorAll("[data-ov].focus")].find(e => e.offsetParent); el?.scrollIntoView({ block: "center", behavior: "smooth" }); }, 120);
   if (own) {} else
   if (pv) { document.title = `${pv.dataset.pep} prices by vendor | PepSeekr`; }
   else if (h.startsWith("v-") && V[h.slice(2)]) document.title = `${V[h.slice(2)].name}: score, prices, reviews | PepSeekr`;
