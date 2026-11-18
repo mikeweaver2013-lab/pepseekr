@@ -102,7 +102,7 @@ function ingest(d) {
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
   // Same compound spelled differently by different stores ("5 Amino 1MQ" / "5-Amino-1MQ", "ACE 031" / "ACE-031"):
   // fold onto one name, the spelling most stores use (ties go to the hyphenated one). Drop names with no letters.
-  const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ" };
+  const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ", "Reta": "Retatrutide", "Tirz": "Tirzepatide", "Sema": "Semaglutide", "Gp-cag": "Cagrilintide", "GP-CAG": "Cagrilintide", "Semax + Selank": "Selank + Semax" };
   ROWS = ROWS.filter(r => /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep));
   ROWS.forEach(r => { if (ALIAS[r.pep]) r.pep = ALIAS[r.pep]; });
   { const keyOf = n => n.toLowerCase().replace(/\bno\b|\bw\/o\b|without/g, "no").replace(/[^a-z0-9+]/g, "");
