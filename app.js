@@ -247,7 +247,7 @@ const themeSel = () => document.documentElement.dataset.theme || "system";
 function chrome() {
   const tab = curTab(), n = unread(), cnt = `<span class="cnt" ${n ? "" : "hidden"}>${n > 9 ? "9+" : n}</span>`;
   const home = (location.hash || "#home") === "#home" || location.hash === "";
-  $("#band").innerHTML = home ? `<div class="band"><div class="wrap"><a href="#list"><span class="new">NEW</span>My list: check off what you need and get the cheapest cart →</a><span class="r">${vendors().length} vendors · ${live().length} live listings · ${pulled()}</span></div></div>` : "";
+  $("#band").innerHTML = home ? `<div class="band"><div class="wrap"><a href="#list"><span class="new">NEW</span>My list: check off what you need and get the cheapest cart →</a><span class="r">${vendors().length} vendors · ${live().length} live listings</span></div></div>` : "";
   const nl = (h, t, k) => `<a href="#${h}" ${tab === k ? 'aria-current="page"' : ""}>${t}</a>`;
   const res = document.documentElement.dataset.resolved;
   $("#top").innerHTML = `<div class="wrap in"><a href="#home" aria-label="PepSeekr home">${wordmark()}</a>
@@ -1097,6 +1097,7 @@ function route(keepScroll) {
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
   if (h.startsWith("p-")) buyBar();
+  paintFresh();
   { const on = $(".sizes.monly [aria-checked=true]"); if (on) on.parentElement.scrollLeft = on.offsetLeft - (on.parentElement.clientWidth - on.offsetWidth) / 2; }
   if (keepScroll && lastRoute === h) scrollTo(0, y); else if (h === "catalog") $("#catalog")?.scrollIntoView(); else if (h === "seller-log") $("#slog")?.scrollIntoView(); else scrollTo(0, 0);
   lastRoute = h;
@@ -1256,6 +1257,26 @@ async function load() {
     else if (!D) $("#view").innerHTML = `<div class="wrap"><div class="card empty" style="margin-top:40px"><b>Can't reach PepSeekr</b><p>Check your connection and try again.</p><button class="btn" type="button" onclick="load()">Try again</button></div></div>`;
   }
 }
+/* ---------- freshness strip: when prices were last checked and when the next check runs ---------- */
+// Prices are checked every 2 hours at :17 past even hours UTC (pg_cron "17 */2 * * *"); a full check takes ~3 minutes.
+function nextPull(now = Date.now()) {
+  const d = new Date(now); d.setUTCMinutes(17, 0, 0);
+  if (d.getUTCHours() % 2) d.setUTCHours(d.getUTCHours() + 1);
+  while (d.getTime() <= now) d.setUTCHours(d.getUTCHours() + 2);
+  return d.getTime();
+}
+const span = ms => { const m = Math.max(1, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
+let freshReloadAt = 0;
+function paintFresh() {
+  const el = $("#fresh"); if (!el || !D) return;
+  const now = Date.now(), last = newest(), next = nextPull(now), prev = next - 7200000;
+  const running = now - prev < 4 * 60000 && (!last || last < prev);
+  const pct = Math.min(100, Math.max(0, (now - prev) / 7200000 * 100));
+  el.innerHTML = `<span class="dot${running ? " run" : ""}" aria-hidden="true"></span><span>${running ? "Checking prices now…" : `Prices checked ${last ? span(now - last) + " ago" : "recently"}`}</span><span class="sep" aria-hidden="true">·</span><span>next check in ${span(next - now)}</span><span class="bar" style="width:${pct.toFixed(1)}%" aria-hidden="true"></span>`;
+  el.title = `Every store is checked every 2 hours. Next check about ${new Date(next).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`;
+  // pick up the new prices a few minutes after a check starts
+  if (now > prev + 4 * 60000 && last < prev && freshReloadAt < prev && document.visibilityState === "visible") { freshReloadAt = now; load(); }
+}
 (function boot() {
   resolveTheme();
   RV = store.get("pf_reviews", RV);
@@ -1264,6 +1285,7 @@ async function load() {
   else $("#view").innerHTML = `<div class="wrap"><div class="empty" style="margin-top:60px"><span class="dot"></span><p>Loading vendors and prices…</p></div></div>`;
   load();
   setInterval(() => { if (document.visibilityState === "visible") load(); }, 10 * 60 * 1000);
+  setInterval(paintFresh, 30 * 1000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && D && Date.now() - Date.parse(store.get("pf_cache", {}).at || 0) > 5 * 60 * 1000) load(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 })();

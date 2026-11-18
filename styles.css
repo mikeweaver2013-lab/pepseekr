@@ -726,3 +726,14 @@ dl.pol dt{color:var(--text-3)}
 .szc[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:#fff}
 @media (max-width:767px){.crow{flex-direction:column;align-items:stretch;gap:8px}.crow .cz{max-width:none;justify-content:flex-start}}
 .crow .cz .szc{height:38px;min-height:38px;padding:0 12px;line-height:1;display:inline-flex;align-items:center;border-radius:9px}
+
+/* freshness strip under the header */
+.fresh{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;height:30px;padding:0 16px;font:500 11.5px var(--font-mono);color:var(--text-2);border-bottom:1px solid var(--border);background:var(--surface);overflow:hidden;white-space:nowrap}
+.fresh:empty{display:none}
+.fresh .dot{width:7px;height:7px;border-radius:50%;background:var(--data);box-shadow:0 0 0 0 color-mix(in srgb,var(--data) 45%,transparent);animation:fpulse 2.8s ease-out infinite;flex:none}
+.fresh .dot.run{background:var(--brand);animation-duration:1s}
+.fresh .sep{color:var(--text-3)}
+.fresh .bar{position:absolute;left:0;bottom:0;height:2px;background:linear-gradient(90deg,var(--brand),var(--data));opacity:.55;transition:width 1s linear}
+@keyframes fpulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--data) 45%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.fresh .dot{animation:none}.fresh .bar{transition:none}}
+@media (max-width:767px){.fresh{height:28px;font-size:11px;gap:6px}}
