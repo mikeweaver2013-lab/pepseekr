@@ -1126,9 +1126,19 @@ async function sendCode(email) {
 }
 async function checkCode(code) {
   AUTH.busy = true; AUTH.err = ""; paintAuth();
-  const { error } = await sbc().auth.verifyOtp({ email: AUTH.email, token: code, type: "email" });
+  // our 6-digit code is checked by pk-auth-send, which hands back a one-time token for the session;
+  // a longer code came from Supabase's own fallback email and goes straight to Supabase
+  let error = null, msg = "";
+  if (code.length === 6) {
+    try {
+      const r = await fetch(`${SB}/functions/v1/pk-auth-send`, { method: "POST", headers: { apikey: KEY, "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify", email: AUTH.email, code }) });
+      const j = await r.json().catch(() => ({}));
+      if (j.token_hash) ({ error } = await sbc().auth.verifyOtp({ token_hash: j.token_hash, type: "magiclink" }));
+      else { error = j.error || "x"; msg = j.error === "expired" ? "That code expired. Send a new one." : j.error === "too_many" ? "Too many wrong tries. Send a new code." : j.error === "wrong" ? `That code didn't match.${j.left > 0 ? ` ${j.left} ${j.left === 1 ? "try" : "tries"} left.` : ""}` : ""; }
+    } catch { error = "net"; msg = "Couldn't reach PepSeekr. Check your connection and try again."; }
+  } else ({ error } = await sbc().auth.verifyOtp({ email: AUTH.email, token: code, type: "email" }));
   AUTH.busy = false;
-  if (error) { AUTH.err = /expired/i.test(error.message) ? "That code expired. Send a new one." : "That code didn't work. Check the newest email, or send a new code."; paintAuth(); return; }
+  if (error) { AUTH.err = msg || "That code didn't work. Check the newest email, or send a new code."; paintAuth(); return; }
   AUTH = { step: "email", email: "", busy: false, err: "" };
   if ($("#sheet").classList.contains("open") && $("#authBox")) closeSheet?.();
 }
