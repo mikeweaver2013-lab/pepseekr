@@ -13,7 +13,7 @@ const pct = (a, b) => Math.round((1 - a / b) * 100);
 
 export default async function handler(req) {
   const u = new URL(req.url), t = u.searchParams.get("t") || "home", s = (u.searchParams.get("s") || "").toLowerCase();
-  const [shell, C] = await Promise.all([fetch(new URL("/index.html", u.origin)).then(r => r.text()), loadCatalog()]);
+  const [shell, C] = await Promise.all([fetch(new URL("/shell.html", u.origin)).then(r => r.text()), loadCatalog()]);
   const page = build(t, s, C);
   if (!page) return html(inject(shell, { title: "Page not found | PepSeekr", desc: "This page isn't on PepSeekr.", path: u.pathname, noindex: true, body: `<h1>Page not found</h1><p><a href="/peptides">Browse every peptide</a> or <a href="/vendors">every store</a>.</p>`, route: "home" }), 404);
   return html(inject(shell, page), 200);

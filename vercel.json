@@ -14,7 +14,7 @@
       ]
     },
     {
-      "source": "/(index.html|app.js|styles.css|manifest.webmanifest)",
+      "source": "/(shell.html|app.js|styles.css|manifest.webmanifest)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -28,6 +28,19 @@
         {
           "key": "X-Robots-Tag",
           "value": "noindex"
+        }
+      ]
+    },
+    {
+      "source": "/shell.html",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
         }
       ]
     }
