@@ -102,9 +102,9 @@ function ingest(d) {
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
   // Same compound spelled differently by different stores ("5 Amino 1MQ" / "5-Amino-1MQ", "ACE 031" / "ACE-031"):
   // fold onto one name, the spelling most stores use (ties go to the hyphenated one). Drop names with no letters.
-  const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ", "Reta": "Retatrutide", "Tirz": "Tirzepatide", "Sema": "Semaglutide", "Gp-cag": "Cagrilintide", "GP-CAG": "Cagrilintide", "Selank + Semax": "Semax + Selank" };
+  const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ", "Reta": "Retatrutide", "Tirz": "Tirzepatide", "Sema": "Semaglutide", "Gp-cag": "Cagrilintide", "GP-CAG": "Cagrilintide", "BPC-157 TB-500": "BPC-157 + TB-500", "TB-500 + BPC-157": "BPC-157 + TB-500", "Bronnchgen": "Bronchogen", "Cyrstagen": "Crystagen", "Cagrilintide , Semaglutide": "Cagrilintide + Semaglutide", "Cagrilintide + Retatrutide": "Retatrutide + Cagrilintide", "Glp-tirz": "Tirzepatide", "Glp-sema": "Semaglutide", "GLP- Tirz + Retatrutide": "Tirzepatide + Retatrutide", "Glp-sema + Retatrutide": "Semaglutide + Retatrutide", "Glp-tirz + Semaglutide": "Tirzepatide + Semaglutide", "Tirzepatide + RT": "Tirzepatide + Retatrutide", "GHK- Cu + BPC-157": "BPC-157 + GHK-Cu", "Tesamorelin, Ipamorelin 10+": "Tesamorelin + Ipamorelin", "Tesamorelin, Ipamorelin 5+": "Tesamorelin + Ipamorelin", "Tesamorelin + Ipa 10": "Tesamorelin + Ipamorelin", "Adipotide FTPP": "Adipotide", "FTPP": "Adipotide", "Regeno": "BPC-157 + TB-500 + Cartalax", "Selank + Semax": "Semax + Selank" };
   // a size that is just the number in the compound's name ("BPC-157" read as 157mg) is a misread, not a vial
-  ROWS = ROWS.filter(r => /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep) && !(r.sv >= 100 && new RegExp("\\b" + r.sv + "\\b").test(r.pep)));
+  ROWS = ROWS.filter(r => /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep) && !/leviathan|curcumin|d3 \+ k2|quercetin|pre shred|nectar 3|glycohack|^lipo|b12 \+ ml|carnitine \+ ml|biomale|biofemale/i.test(r.pep) && !(r.sv >= 100 && new RegExp("\\b" + r.sv + "\\b").test(r.pep)));
   ROWS.forEach(r => { if (ALIAS[r.pep]) r.pep = ALIAS[r.pep]; });
   { const keyOf = n => n.toLowerCase().replace(/\bno\b|\bw\/o\b|without/g, "no").replace(/[^a-z0-9+]/g, "");
     const spell = new Map(); ROWS.forEach(r => { const k = keyOf(r.pep), m = spell.get(k) || new Map(); m.set(r.pep, (m.get(r.pep) || 0) + 1); spell.set(k, m); });
@@ -178,10 +178,10 @@ const fillsCart = v => !!v && ["fill", "bag_link", "verify_first"].includes(v.ca
 const cartPill = v => !fillsCart(v) ? "" : `<span class="pill p-cart" title="${v.cart_mode === "verify_first" ? "We can fill your cart here after you confirm your age on their site" : "We can put your items in this store's cart for you"}">${I_CART}<span class="cp-t">Fills cart</span></span>`;
 // Influencer ties: who owns or promotes the store, with the source we found it in
 const I_MIC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
-const tiePill = v => !v || !v.tie_text ? "" : `<span class="pill p-tie" title="${esc(v.tie_text)}">${I_MIC}<span class="cp-t">${v.tie_kind === "owner" ? "Influencer-owned" : "Influencer-promoted"}</span></span>`;
+const tiePill = v => !v || !v.tie_text ? "" : `<span class="pill p-tie" title="${esc(v.tie_text)}">${I_MIC}<span class="cp-t">${v.tie_kind === "owner" ? "Creator-owned" : "Creator-promoted"}</span></span>`;
 const tieHit = (v, q) => q.length >= 3 ? (v.tie_people || []).find(n => n.toLowerCase().includes(q)) : null;
 const tieWho = v => (v.tie_people || [])[0] || "";
-const tieLine = v => !v || !v.tie_text ? "" : `<p class="tie">${I_MIC}<span>${esc(v.tie_text)}.${v.tie_url ? ` <a href="${esc(v.tie_url)}" target="_blank" rel="noopener">Source ↗</a>` : ""}</span></p>`;
+const tieLine = v => !v || !v.tie_text ? "" : `<p class="tie">${I_MIC}<span>${esc(v.tie_text)}.${v.tie_url ? ` <a href="${esc(v.tie_url)}" target="_blank" rel="noopener">Source ↗</a>` : ""}${v.tie_checked ? ` <span class="t3">Checked ${esc(new Date(v.tie_checked + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }))}.</span>` : ""} <a href="/contact?topic=correction&amp;about=${esc(v.id)}">Report a correction</a></span></p>`;
 const vis = (rows = live()) => rows.filter(r => (!S.fill || fillsCart(V[r.v])) && (!S.rep || !lowRated(V[r.v])) && (!S.stock || r.stock) && (!S.coa || (r.coa === true && r.coaState !== "reused")) && (!S.vendor || r.v === S.vendor));
 const bestOf = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) / c.sv < eff(a) / a.sv ? c : a) : null; };
 const bestPrice = list => { const p = list.filter(r => r.stock); return p.length ? p.reduce((a, c) => eff(c) < eff(a) ? c : a) : null; };
@@ -276,7 +276,7 @@ function chrome() {
   const nl = (h, t, k) => `<a href="#${h}" ${tab === k ? 'aria-current="page"' : ""}>${t}</a>`;
   const res = document.documentElement.dataset.resolved;
   $("#top").innerHTML = `<div class="wrap in"><a href="#home" aria-label="PepSeekr home">${wordmark()}</a>
-    <nav class="nav" aria-label="Main">${nl("home", "Index", "index")}${nl("vendors", "Vendors", "vendors")}${nl("coa", "COA library", "coa")}${nl("list", "My list", "protocol")}</nav>
+    <nav class="nav" aria-label="Main">${nl("home", "Index", "index")}${nl("vendors", "Vendors", "vendors")}${nl("sales", "Sales", "sales")}${nl("coa", "COA library", "coa")}${nl("list", "My list", "protocol")}</nav>
     <div class="nsearch" role="combobox" aria-expanded="false" aria-haspopup="listbox">${I.search}<input id="nq" type="search" placeholder="Search peptides or vendors" autocomplete="off" aria-label="Search peptides or vendors" value="${esc(S.q)}"><span class="kbd">⌘K</span><div class="sugg" id="sugg" role="listbox"></div></div>
     <div class="acts"><div class="tt" role="radiogroup" aria-label="Theme"><button type="button" role="radio" aria-checked="${res === "light"}" data-theme-set="light" aria-label="Light">${I.sun}</button><button type="button" role="radio" aria-checked="${res === "dark"}" data-theme-set="dark" aria-label="Dark">${I.moon}</button></div>
     <a class="btn" href="#watchlist">${I.star} Watchlist <span class="mono t3">${Object.values(WATCH).filter(w => w.on).length}</span></a>
@@ -288,7 +288,7 @@ function chrome() {
     <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a>${acctBtn("mib")}</div>`;
   const tb = (hh, t, k, icn, extra = "") => `<a href="#${hh}" ${tab === k ? 'aria-current="page"' : ""}><i>${icn}</i>${t}${extra}</a>`;
   $("#tabbar").innerHTML = tb("home", "Index", "index", I.home) + tb("search", "Search", "search", I.search) + tb("list", "My list", "protocol", I.dl) + tb("alerts", "Alerts", "alerts", I.bell, cnt) + tb("watchlist", "Watchlist", "watchlist", I.star);
-  $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything or take a cut from sellers; confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="#vendors">List your store</a> · <a href="#vendors">Suggest a seller</a> · <a href="#seller-log">Seller log</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
+  $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything or take a cut from sellers; confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="/sales">Sales today</a> · <a href="/method">How it works</a> · <a href="/about">About</a> · <a href="/contact">Contact</a> · <a href="/contact?topic=store">List or suggest a store</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
 }
 function bellDD() {
   const list = ALERTS.filter(relevant).slice(0, 4), since = seenAlerts();
@@ -397,6 +397,7 @@ function vHome() {
     ${ctaBand()}
     ${sec("04", "Catalog", "Every peptide we track", "", "")}
     ${catalog(24)}
+    ${signupBox("home")}
   </div>`;
 }
 function vSearch() {
@@ -446,6 +447,7 @@ function vProduct(slug) {
         <div class="row" style="gap:16px">${["drop", "restock", "sale"].map(k => `<button type="button" class="ck" role="checkbox" aria-checked="${w[k] !== false}" data-wk="${k}"><span class="chk">${I.check}</span>${{ drop: "Price drop", restock: "Restock", sale: "Sale" }[k]}</button>`).join("")}</div>${pushCard(true)}</div>
       <div class="card panel"><div class="bar"><h3>Verified buyer reviews</h3><button class="link" type="button" data-review="${esc(b.v)}">Write one</button></div>
         ${rv.length ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${avg.toFixed(1)}</b><div>${stars(avg)}<div class="hint">${rv.length} verified review${rv.length > 1 ? "s" : ""}</div></div></div>${hist(rv)}${rv.slice(0, 4).map(r => reviewItem(r, true)).join("")}` : `<div class="empty" style="padding:18px 0 4px"><span class="ei">${I.shield}</span><b>No reviews for ${esc(short(p))} yet</b><p>Reviews come only from buyers who show a receipt.</p></div>`}</div>
+      ${signupBox("product")}
     </aside></div></div>`;
 }
 function hist(rv) { const d = [5, 4, 3, 2, 1].map(s => rv.filter(r => r.stars === s).length), t = rv.length || 1; return `<div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(d[i] / t * 100)}%"></b></i><span>${d[i]}</span></div>`).join("")}</div>`; }
@@ -519,7 +521,7 @@ function vVendors() {
   const vs = S.vtie ? all.filter(v => v.tie_text) : all;
   return `<div class="wrap">${sec("", "Vendors", "Who to buy from", "Score = reviews 40 + price 30 + COA 20 + shipping 10")}
     <p class="t2" style="max-width:70ch;margin-top:-6px">Reviews come from buyers who showed a receipt, blended with each vendor's outside reputation. Price compares every vial to the average for the same size. Vendors are listed for free; none pay for placement or ranking.</p>
-    <div class="row" style="gap:8px;margin-top:16px" role="radiogroup" aria-label="Show"><button class="chip" type="button" role="radio" data-vtie="" aria-checked="${!S.vtie}" aria-pressed="${!S.vtie}">All stores <span>${all.length}</span></button><button class="chip" type="button" role="radio" data-vtie="1" aria-checked="${!!S.vtie}" aria-pressed="${!!S.vtie}">${I_MIC}Influencer stores <span>${nTie}</span></button></div>
+    <div class="row" style="gap:8px;margin-top:16px" role="radiogroup" aria-label="Show"><button class="chip" type="button" role="radio" data-vtie="" aria-checked="${!S.vtie}" aria-pressed="${!S.vtie}">All stores <span>${all.length}</span></button><button class="chip" type="button" role="radio" data-vtie="1" aria-checked="${!!S.vtie}" aria-pressed="${!!S.vtie}">${I_MIC}Creator-linked stores <span>${nTie}</span></button></div>
     ${S.vtie ? `<p class="hint" style="margin-top:8px">Stores owned by, or promoted by, a creator or podcaster. Each tie links to where we found it.</p>` : ""}
     <div class="g3c" style="margin-top:16px">${vs.map((v, i) => vendorCard(v, i === 0 && !S.vtie)).join("")}</div>
     <div class="g3c" style="margin-top:36px;grid-template-columns:1fr 1fr">
@@ -901,6 +903,31 @@ function boardGo() {
   B.timer = setTimeout(tick, 2600); boardPaint();
 }
 function boardOpen() { const B = BOARD; if (!B) return; B.win = window.open(V[B.vid].url, "pk_" + B.vid); B.opened = true; boardPaint(); }
+
+/* ---------- Sales (Black Friday / Cyber Monday ready) ---------- */
+function vSales() {
+  const on = vis(live().filter(r => r.sale && r.reg > r.price)).map(r => Object.assign({}, r, { off: Math.round((1 - r.price / r.reg) * 100) })).filter(r => r.off >= 3);
+  const sort = S.salesort || "off";
+  on.sort(sort === "off" ? (a, b) => b.off - a.off : sort === "mg" ? (a, b) => a.price / a.sv - b.price / b.sv : (a, b) => a.price - b.price);
+  const promos = Object.values(V).filter(v => v.promo_text && ROWS.some(r => r.v === v.id));
+  const cats = [...new Set(on.map(r => catOf(r.pep)))], cat = S.salecat && cats.includes(S.salecat) ? S.salecat : "";
+  const list = cat ? on.filter(r => catOf(r.pep) === cat) : on;
+  return `<div class="wrap">${sec("", "Sales", `${on.length} vials on sale right now`, `<span class="hint">Checked every 2 hours. "Was" is the store's own regular price.</span>`)}
+    ${promos.length ? `<div class="card panel"><h3>Store-wide sales and codes</h3><div class="promos-l">${promos.map(v => `<a class="pr-row" href="#v-${esc(v.id)}">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="hint">${esc(v.promo_text)}</span></span>${I.chev}</a>`).join("")}</div></div>` : ""}
+    <div class="row" style="gap:8px;margin:16px 0 10px;flex-wrap:wrap"><span class="lbl">Sort</span>${[["off", "Biggest % off"], ["price", "Lowest price"], ["mg", "Lowest $/mg"]].map(([k, t]) => `<button class="chip sm" type="button" data-salesort="${k}" aria-pressed="${sort === k}">${t}</button>`).join("")}</div>
+    ${cats.length > 1 ? `<div class="hs row" style="gap:8px;flex-wrap:nowrap;margin-bottom:12px"><button class="chip sm" type="button" data-salecat="" aria-pressed="${!cat}">All</button>${cats.map(c => `<button class="chip sm" type="button" data-salecat="${esc(c)}" aria-pressed="${cat === c}">${esc(c)}</button>`).join("")}</div>` : ""}
+    ${list.length ? `<div class="card sales">${list.slice(0, 120).map(r => `<a class="srow" href="#p-${slugOf(r.pep)}"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(r.pep, r.size, 42)}</span><span style="min-width:0"><b>${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="mono sp"><s class="t3">${money2(r.reg)}</s> <b>${money2(r.price)}</b></span><span class="pill p-sale">${r.off}% off</span></a>`).join("")}</div>`
+      : `<div class="card empty"><b>No vials are marked down right now</b><p>Sales show up here within 2 hours of a store starting one. Watch a vial to get an alert.</p><a class="btn" href="#search">Browse peptides</a></div>`}
+    ${signupBox("sales")}</div>`;
+}
+
+/* ---------- weekly email sign-up ---------- */
+function signupBox(src) {
+  if (store.get("pk_subbed", false)) return "";
+  return `<div class="card panel signup" style="margin-top:16px"><h3>Price drops and restocks, weekly</h3><p class="hint" style="margin-top:4px">One email a week with the biggest drops, restocks and sales. Unsubscribe anytime.</p>
+    <form class="row" data-signup="${esc(src)}" style="gap:8px;margin-top:10px;flex-wrap:nowrap"><input type="email" name="email" required autocomplete="email" placeholder="you@example.com" aria-label="Email address" class="authin" style="height:44px;flex:1;min-width:0"><button class="btn p" type="submit">Sign up</button></form></div>`;
+}
+function vDoc() { return ""; }
 
 /* ---------- write a review (3 steps) ---------- */
 let RW = null;
@@ -1321,7 +1348,7 @@ document.addEventListener("input", e => { if (e.target.id === "nq" || e.target.i
 /* ---------- owner report ---------- */
 let STATS = null, STATS_DAYS = 30;
 async function loadStats() {
-  try { STATS = await rpc("pk_stats", { p_key: ownerKey(), p_days: STATS_DAYS }); } catch { STATS = { error: true }; }
+  try { const [st, ib] = await Promise.all([rpc("pk_stats", { p_key: ownerKey(), p_days: STATS_DAYS }), rpc("pk_owner_inbox", { p_key: ownerKey() }).catch(() => null)]); STATS = st; STATS.inbox = ib; } catch { STATS = { error: true }; }
   if ((location.hash || "") === "#stats") route(true);
 }
 function vStats() {
@@ -1347,6 +1374,7 @@ function vStats() {
       ${card("Top pages", tbl(["Page", "Views"], (S2.pages || []).slice(0, 25).map(r => `<tr><td>${esc(r.path)}</td><td class="mono">${n(r.views)}</td></tr>`)))}
       ${card("What people search for", tbl(["Search", "Times"], (S2.searches || []).slice(0, 25).map(r => `<tr><td>${esc(r.q)}</td><td class="mono">${n(r.n)}</td></tr>`)))}
     </div>
+    ${S2.inbox ? `<div class="card panel" style="margin-top:16px"><div class="bar"><h3>Messages</h3><span class="hint">${n(S2.inbox.subscribers)} on the weekly email list</span></div>${(S2.inbox.messages || []).length ? (S2.inbox.messages || []).slice(0, 40).map(m => `<div class="msg"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="pill p-n">${esc(m.kind || "message")}</span><b>${esc(m.subject || "(no subject)")}</b><span class="t3" style="font-size:12.5px">${esc(ago(m.at))}${m.email ? ` · <a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : ""}${m.page ? ` · about ${esc(V[m.page]?.name || m.page)}` : ""}</span></div><p style="margin:6px 0 0;white-space:pre-wrap">${esc(m.body)}</p></div>`).join("") : `<p class="hint" style="padding:12px 0">No messages yet. They come from pepseekr.com/contact and the "Report a correction" links.</p>`}</div>` : ""}
     <p class="hint" style="margin:14px 0 40px">Your own visits aren't counted while the owner key is on this browser. Bots and crawlers are skipped. No cookies or IP addresses are stored.</p></div>`;
 }
 document.addEventListener("click", e => { const b = e.target.closest?.("[data-statdays]"); if (b) { STATS_DAYS = +b.dataset.statdays; STATS = null; route(true); } });
@@ -1443,14 +1471,14 @@ const pkLink = () => {
 function route(keepScroll) {
   if (!D) return;
   linkAdd();
-  let h = (location.hash || "#home").slice(1).split("?")[0];
+  let h = (location.hash || "").slice(1).split("?")[0] || (document.getElementById("seo")?.dataset.route === "doc" ? "doc" : "home");
   if (h.startsWith("s-")) h = "v-" + h.slice(2);
   if (h === "sellers") h = "vendors";
   if (h === "list") h = "protocol";   // "My list" page; #protocol kept for old links
   if (h === "alerts" || h === "watchlist") { if (lastRoute !== "alerts" && lastRoute !== "watchlist") openedAt = seenAlerts(); }
   const y = scrollY; closeDD();
   chrome();
-  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : vHome();
+  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : h === "sales" ? vSales() : h === "doc" ? vDoc() : vHome();
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
   if (h.startsWith("p-")) buyBar();
@@ -1655,18 +1683,19 @@ function pathBoot() {
   if (location.hash) return;
   const p = location.pathname.replace(/\/$/, ""), seo = document.getElementById("seo")?.dataset.route;
   let h = seo && seo !== "home" ? seo : "";
-  if (!h) { let m; if ((m = p.match(/^\/peptides\/([^/]+)/))) h = "p-" + m[1]; else if ((m = p.match(/^\/vendors\/([^/]+)/))) h = "v-" + m[1]; else if (p === "/vendors" || p === "/influencers") h = "vendors"; else if (p === "/peptides") h = "search"; }
+  if (!h) { let m; if ((m = p.match(/^\/peptides\/([^/]+)/))) h = "p-" + m[1]; else if ((m = p.match(/^\/vendors\/([^/]+)/))) h = "v-" + m[1]; else if (p === "/vendors" || p === "/influencers") h = "vendors"; else if (p === "/peptides") h = "search"; else if (p === "/sales") h = "sales"; else if (/^\/(method|about|terms|privacy|contact)$/.test(p)) h = "doc"; }
   if (p.startsWith("/influencers")) S.vtie = p === "/influencers";
-  if (h) history.replaceState(null, "", location.pathname + location.search + "#" + h);
+  if (h && h !== "doc") history.replaceState(null, "", location.pathname + location.search + "#" + h);
 }
 (function boot() {
+  pathBoot();   // must run before any route(), or a cached render resets the real URL
   resolveTheme();
   RV = store.get("pf_reviews", RV);
   const c = store.get("pf_cache", null);
   if (c) { ingest(c.d); route(); }
   else $("#view").innerHTML = `<div class="wrap"><div class="empty" style="margin-top:60px"><span class="dot"></span><p>Loading vendors and prices…</p></div></div>`;
-  pathBoot();
   trackLand();
+  contactPrefill();
   load();
   authInit();
   setInterval(() => { if (document.visibilityState === "visible") load(); }, 10 * 60 * 1000);
@@ -1685,3 +1714,30 @@ document.addEventListener("input", e => {
   clearTimeout(window.__pctT); window.__pctT = setTimeout(saveW, 400);
 });
 document.addEventListener("change", e => { if (e.target.closest?.("[data-pctr]") && !$("#sheet.open")) route(true); });
+// sales sort/filter, weekly email sign-up, contact form
+document.addEventListener("click", e => {
+  const so = e.target.closest?.("[data-salesort]"); if (so) { S.salesort = so.dataset.salesort; route(true); return; }
+  const sc = e.target.closest?.("[data-salecat]"); if (sc) { S.salecat = sc.dataset.salecat; route(true); }
+});
+document.addEventListener("submit", async e => {
+  const f = e.target;
+  if (f.matches?.("[data-signup]")) {
+    e.preventDefault(); const em = f.email.value.trim(), b = f.querySelector("button"); b.disabled = true;
+    try { await rpc("pk_subscribe", { p_email: em, p_src: f.dataset.signup }); store.set("pk_subbed", true); f.closest(".signup").innerHTML = `<h3>You're in</h3><p class="hint" style="margin-top:4px">The first email goes out this week. Every email has an unsubscribe link.</p>`; TRK.push({ kind: "search", q: "__signup:" + f.dataset.signup, path: routePath() }); }
+    catch { b.disabled = false; toast("That email didn't work. Check it and try again."); }
+  }
+  if (f.id === "contactForm") {
+    e.preventDefault(); const n = $("#contactNote"), b = f.querySelector("button"); b.disabled = true; n.textContent = "Sending…";
+    try { await rpc("pk_contact_send", { p_kind: f.kind.value, p_email: f.email.value, p_subject: f.subject.value, p_body: f.body.value, p_page: new URLSearchParams(location.search).get("about") || "" }); f.reset(); n.textContent = "Thanks. Your message is in, and we'll reply by email if you left one."; }
+    catch { n.textContent = "That didn't send. Check your connection and try again."; }
+    b.disabled = false;
+  }
+});
+// prefill the contact form from links like /contact?topic=correction&about=gila
+function contactPrefill(n = 0) {
+  const f = document.getElementById("contactForm"); if (!f) return;
+  if (!Object.keys(V).length && n < 20) return setTimeout(() => contactPrefill(n + 1), 500);
+  const q = new URLSearchParams(location.search), t = q.get("topic"), a = q.get("about");
+  if (t && [...f.kind.options].some(o => o.value === t)) f.kind.value = t;
+  if (a && !f.subject.value) f.subject.value = (t === "correction" ? "Correction: " : "") + (V[a]?.name || a);
+}

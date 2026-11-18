@@ -60,6 +60,34 @@
   ],
   "rewrites": [
     {
+      "source": "/sales",
+      "destination": "/api/seo?t=sales"
+    },
+    {
+      "source": "/llms.txt",
+      "destination": "/api/llms"
+    },
+    {
+      "source": "/method",
+      "destination": "/api/seo?t=doc&s=method"
+    },
+    {
+      "source": "/about",
+      "destination": "/api/seo?t=doc&s=about"
+    },
+    {
+      "source": "/terms",
+      "destination": "/api/seo?t=doc&s=terms"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/api/seo?t=doc&s=privacy"
+    },
+    {
+      "source": "/contact",
+      "destination": "/api/seo?t=doc&s=contact"
+    },
+    {
       "source": "/",
       "destination": "/api/seo?t=home"
     },

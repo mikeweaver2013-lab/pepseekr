@@ -23,15 +23,15 @@ export const CATS = [
 ];
 export const catOf = p => (CATS.find(c => c[1].includes(p)) || [])[0] || (/ \+ /.test(p) ? "Blends" : "Other");
 
-const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ", "Reta": "Retatrutide", "Tirz": "Tirzepatide", "Sema": "Semaglutide", "Gp-cag": "Cagrilintide", "GP-CAG": "Cagrilintide", "Selank + Semax": "Semax + Selank" };
+const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ", "Reta": "Retatrutide", "Tirz": "Tirzepatide", "Sema": "Semaglutide", "Gp-cag": "Cagrilintide", "GP-CAG": "Cagrilintide", "BPC-157 TB-500": "BPC-157 + TB-500", "TB-500 + BPC-157": "BPC-157 + TB-500", "Bronnchgen": "Bronchogen", "Cyrstagen": "Crystagen", "Cagrilintide , Semaglutide": "Cagrilintide + Semaglutide", "Cagrilintide + Retatrutide": "Retatrutide + Cagrilintide", "Glp-tirz": "Tirzepatide", "Glp-sema": "Semaglutide", "GLP- Tirz + Retatrutide": "Tirzepatide + Retatrutide", "Glp-sema + Retatrutide": "Semaglutide + Retatrutide", "Glp-tirz + Semaglutide": "Tirzepatide + Semaglutide", "Tirzepatide + RT": "Tirzepatide + Retatrutide", "GHK- Cu + BPC-157": "BPC-157 + GHK-Cu", "Tesamorelin, Ipamorelin 10+": "Tesamorelin + Ipamorelin", "Tesamorelin, Ipamorelin 5+": "Tesamorelin + Ipamorelin", "Tesamorelin + Ipa 10": "Tesamorelin + Ipamorelin", "Adipotide FTPP": "Adipotide", "FTPP": "Adipotide", "Regeno": "BPC-157 + TB-500 + Cartalax", "Selank + Semax": "Semax + Selank" };
 
 export async function loadCatalog() {
   const r = await fetch(`${SB}/rest/v1/rpc/market_catalog_json`, { method: "POST", headers: { apikey: KEY, "Content-Type": "application/json" }, body: "{}" });
   if (!r.ok) throw new Error("catalog " + r.status);
   const d = await r.json();
   const V = {}; (d.vendors || []).forEach(v => V[v.id] = v);
-  let ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], stock: !!a[8], coa: a[9], url: a[10] }))
-    .filter(r => V[r.v] && r.price > 0 && r.sv > 0 && r.pep && /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep) && !(r.sv >= 100 && new RegExp("\\b" + r.sv + "\\b").test(r.pep)));
+  let ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10] }))
+    .filter(r => V[r.v] && r.price > 0 && r.sv > 0 && r.pep && /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep) && !/leviathan|curcumin|d3 \+ k2|quercetin|pre shred|nectar 3|glycohack|^lipo|b12 \+ ml|carnitine \+ ml|biomale|biofemale/i.test(r.pep) && !(r.sv >= 100 && new RegExp("\\b" + r.sv + "\\b").test(r.pep)));
   ROWS.forEach(r => { if (ALIAS[r.pep]) r.pep = ALIAS[r.pep]; });
   const keyOf = n => n.toLowerCase().replace(/\bno\b|\bw\/o\b|without/g, "no").replace(/[^a-z0-9+]/g, "");
   const spell = new Map(); ROWS.forEach(r => { const k = keyOf(r.pep), m = spell.get(k) || new Map(); m.set(r.pep, (m.get(r.pep) || 0) + 1); spell.set(k, m); });
