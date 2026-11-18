@@ -21,6 +21,15 @@
           "value": "no-cache"
         }
       ]
+    },
+    {
+      "source": "/mock/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
     }
   ],
   "redirects": [
@@ -34,6 +43,40 @@
       ],
       "destination": "https://pepseekr.com/$1",
       "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/seo?t=home"
+    },
+    {
+      "source": "/peptides",
+      "destination": "/api/seo?t=peps"
+    },
+    {
+      "source": "/peptides/:slug",
+      "destination": "/api/seo?t=p&s=:slug"
+    },
+    {
+      "source": "/vendors",
+      "destination": "/api/seo?t=vendors"
+    },
+    {
+      "source": "/vendors/:id",
+      "destination": "/api/seo?t=v&s=:id"
+    },
+    {
+      "source": "/influencers",
+      "destination": "/api/seo?t=infs"
+    },
+    {
+      "source": "/influencers/:slug",
+      "destination": "/api/seo?t=i&s=:slug"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
     }
   ]
 }

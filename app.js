@@ -102,8 +102,9 @@ function ingest(d) {
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
   // Same compound spelled differently by different stores ("5 Amino 1MQ" / "5-Amino-1MQ", "ACE 031" / "ACE-031"):
   // fold onto one name, the spelling most stores use (ties go to the hyphenated one). Drop names with no letters.
-  const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ", "Reta": "Retatrutide", "Tirz": "Tirzepatide", "Sema": "Semaglutide", "Gp-cag": "Cagrilintide", "GP-CAG": "Cagrilintide", "Semax + Selank": "Selank + Semax" };
-  ROWS = ROWS.filter(r => /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep));
+  const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ", "Reta": "Retatrutide", "Tirz": "Tirzepatide", "Sema": "Semaglutide", "Gp-cag": "Cagrilintide", "GP-CAG": "Cagrilintide", "Selank + Semax": "Semax + Selank" };
+  // a size that is just the number in the compound's name ("BPC-157" read as 157mg) is a misread, not a vial
+  ROWS = ROWS.filter(r => /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep) && !(r.sv >= 100 && new RegExp("\\b" + r.sv + "\\b").test(r.pep)));
   ROWS.forEach(r => { if (ALIAS[r.pep]) r.pep = ALIAS[r.pep]; });
   { const keyOf = n => n.toLowerCase().replace(/\bno\b|\bw\/o\b|without/g, "no").replace(/[^a-z0-9+]/g, "");
     const spell = new Map(); ROWS.forEach(r => { const k = keyOf(r.pep), m = spell.get(k) || new Map(); m.set(r.pep, (m.get(r.pep) || 0) + 1); spell.set(k, m); });
@@ -511,7 +512,7 @@ function vVendors() {
       <div class="card panel"><span class="kick"><span class="lbl">Suggest a seller</span></span><h3 style="margin-top:10px">Know a vendor we should check?</h3><p class="hint" style="margin-top:4px">We vet every store the same way: a readable catalog, lab reports on product pages, real contact details, and no dosing or health claims.</p>
         <form id="suggest" class="notify" style="margin-top:12px"><input class="field" name="url" placeholder="Store web address" required inputmode="url" autocomplete="off" aria-label="Store web address"><input class="field" name="name" placeholder="Store name (optional)" aria-label="Store name"><div class="seg" role="radiogroup" aria-label="I'm a"><button type="button" role="radio" aria-checked="true" data-kind="buyer">I bought from them</button><button type="button" role="radio" aria-checked="false" data-kind="seller">I run this store</button></div><input class="field" name="email" type="email" placeholder="Email (optional, for the result)" aria-label="Email" autocomplete="email"><button class="btn p" type="submit">Send it in</button></form></div>
       <div class="card panel"><span class="kick"><span class="lbl">Seller log</span></span><h3 style="margin-top:10px">Every listing change, in public</h3><div id="slog" class="coal" style="margin-top:10px"><p class="hint">Loading…</p></div></div></div>
-    ${sec("", "Owner tools", "Review queue &amp; stores")}<div id="owner">${ownerKey() ? `<p class="hint">Loading…</p>` : `<div class="box" style="max-width:460px"><p class="hint">For the site owner. Enter your key to check reviews and manage stores.</p><input class="field" id="adminKey" type="password" autocomplete="off" placeholder="Owner key" aria-label="Owner key"><button class="btn p" id="adminGo" type="button">Unlock</button></div>`}</div></div>`;
+    ${sec("", "Owner tools", "Review queue &amp; stores")}${ownerKey() ? `<p style="margin:-4px 0 12px"><a class="btn" href="#stats">Traffic and store clicks</a></p>` : ""}<div id="owner">${ownerKey() ? `<p class="hint">Loading…</p>` : `<div class="box" style="max-width:460px"><p class="hint">For the site owner. Enter your key to check reviews and manage stores.</p><input class="field" id="adminKey" type="password" autocomplete="off" placeholder="Owner key" aria-label="Owner key"><button class="btn p" id="adminGo" type="button">Unlock</button></div>`}</div></div>`;
 }
 async function loadLog() {
   const el = $("#slog"); if (!el) return;
@@ -869,6 +870,7 @@ const boardPaint = () => { const el = document.getElementById("boardBox"); if (e
 const bagUrl = (vid, items) => `${V[vid].url.replace(/\/$/, "")}/cart.html?add=${items.map(i => encodeURIComponent(i.id) + ":" + i.qty).join(",")}&utm_source=pepseekr&utm_medium=cart`;
 function boardGo() {
   const B = BOARD; if (!B) return;
+  if (!B.tracked) { B.tracked = true; trackOut(B.vid, null, null, "fill_cart"); }
   if (B.mode === "bag_link") { B.win = window.open(bagUrl(B.vid, B.auto), "pk_" + B.vid); if (!B.win) { toast("Your browser blocked the new tab. Allow pop-ups for PepSeekr and try again."); return; } B.step = B.auto.length; B.done = true; boardPaint(); return; }
   const name = "pk_" + B.vid;
   // must open the tab inside the tap, or the browser blocks it
@@ -1217,6 +1219,100 @@ function lockedCtl(R, tabs) {
     <div class="row donly" style="gap:16px;margin-top:10px"><button type="button" class="ck locked" data-upgrade="swaps">${I_LOCK}Allow size swaps</button><button type="button" class="ck locked" data-upgrade="one">${I_LOCK}Buy everything from one seller</button></div>
     <p class="hint" style="margin-top:8px">Free shows the lowest price. <button class="link" type="button" data-upgrade="routes">Pro compares every route and size swap</button>.</p>`;
 }
+/* ---------- first-party analytics: landings, page views, searches, clicks out to stores ----------
+   No cookies, no IPs, no third parties. A random id per browser tab session ties a visit together. */
+const TRK = (() => {
+  const bot = navigator.webdriver || /bot|crawl|spider|slurp|headless|lighthouse|preview/i.test(navigator.userAgent);
+  let sid = ""; try { sid = sessionStorage.getItem("pk_sid") || ""; if (!sid) { sid = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem("pk_sid", sid); } } catch { sid = "x" + Math.random().toString(36).slice(2); }
+  const q = [], mobile = matchMedia("(max-width:760px)").matches;
+  let t = 0;
+  const flush = () => { clearTimeout(t); if (!q.length) return; const body = JSON.stringify({ p: q.splice(0, 20) });
+    try { fetch(`${SB}/rest/v1/rpc/pk_track`, { method: "POST", keepalive: true, headers: { apikey: KEY, "Content-Type": "application/json" }, body }).catch(() => {}); } catch {} };
+  const push = e => { if (bot || ownerKey()) return; q.push(Object.assign({ sid, mobile }, e)); clearTimeout(t); t = setTimeout(flush, e.kind === "out" ? 0 : 2500); };
+  addEventListener("pagehide", flush); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+  return { push, flush, sid };
+})();
+// the page a hash route stands for, written as its real URL so reports read the same as Search Console
+function routePath() {
+  const h = (location.hash || "").slice(1).split("?")[0];
+  if (!h) return location.pathname;
+  if (h.startsWith("p-")) return "/peptides/" + h.slice(2);
+  if (h.startsWith("v-") || h.startsWith("s-")) return "/vendors/" + h.slice(2);
+  return h === "home" ? "/" : "/" + h;
+}
+let lastView = "";
+function trackView() { const p = routePath(); if (p === lastView) return; lastView = p; TRK.push({ kind: "view", path: p }); }
+function trackLand() {
+  try { if (sessionStorage.getItem("pk_land")) return; sessionStorage.setItem("pk_land", "1"); } catch {}
+  const u = new URL(location.href), g = k => u.searchParams.get(k) || "";
+  let ref = ""; try { const r = document.referrer && new URL(document.referrer); if (r && r.hostname !== location.hostname) ref = r.hostname.replace(/^www\./, ""); } catch {}
+  TRK.push({ kind: "land", path: routePath(), ref, src: g("utm_source") || g("ref") || g("via"), med: g("utm_medium"), camp: g("utm_campaign") });
+  // drop tracking params from the address bar once recorded, so shares stay clean
+  if (["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "via", "fbclid", "gclid"].some(k => u.searchParams.has(k))) {
+    ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "via", "fbclid", "gclid"].forEach(k => u.searchParams.delete(k));
+    history.replaceState(history.state, "", u.pathname + (u.search || "") + u.hash);
+  }
+}
+let srchT = 0;
+function trackSearch(v) { clearTimeout(srchT); v = (v || "").trim(); if (v.length < 3) return; srchT = setTimeout(() => TRK.push({ kind: "search", q: v, path: routePath() }), 1500); }
+const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
+function vendorByUrl(u) { const h = hostOf(u); return h ? Object.values(V).find(v => hostOf(v.url) === h) : null; }
+function ctxOf(el) {
+  if (el?.closest?.("#sheet")) return BOARD ? "cart_sheet" : "sheet";
+  if (el?.closest?.(".leg,.itin")) return "route";
+  if (el?.closest?.(".offers,.ocard,.ocards")) return "offers";
+  if (el?.closest?.(".vhero")) return "store_page";
+  if (el?.closest?.("#mbuy")) return "buy_bar";
+  if (el?.closest?.("#seo")) return "seo";
+  const h = (location.hash || "#home").slice(1);
+  return h.startsWith("p-") ? "product" : h.startsWith("v-") ? "store_page" : h === "protocol" || h === "list" ? "route" : h || "home";
+}
+function trackOut(vid, pep, size, ctx) { TRK.push({ kind: "out", vendor: vid, pep: pep || null, size: size || null, ctx, path: routePath() }); }
+// Tag store links so stores see PepSeekr in their own analytics. Changes the link only as it's clicked.
+function tagOut(u, ctx) { try { const x = new URL(u); if (!x.searchParams.has("utm_source")) { x.searchParams.set("utm_source", "pepseekr"); x.searchParams.set("utm_medium", "referral"); x.searchParams.set("utm_campaign", ctx); } return x.href; } catch { return u; } }
+document.addEventListener("click", e => {
+  const a = e.target.closest?.("a[href^='http']"); if (!a) return;
+  const v = vendorByUrl(a.href); if (!v) return;
+  const ctx = ctxOf(a), pv = $("[data-pep]"), cand = ROWS.filter(r => r.v === v.id && r.url && (r.url === a.href || a.href.startsWith(r.url)));
+  const row = cand.find(r => r.url === a.href) || cand.find(r => pv && r.pep === pv.dataset.pep && r.size === pv.dataset.size) || (cand.length === 1 ? cand[0] : null);
+  trackOut(v.id, row?.pep, row?.size, ctx);
+  a.href = tagOut(a.href, ctx);
+}, true);
+document.addEventListener("auxclick", e => { const a = e.target.closest?.("a[href^='http']"); const v = a && vendorByUrl(a.href); if (v) { trackOut(v.id, null, null, ctxOf(a)); a.href = tagOut(a.href, ctxOf(a)); } }, true);
+document.addEventListener("input", e => { if (e.target.id === "nq" || e.target.id === "mq") trackSearch(e.target.value); });
+
+/* ---------- owner report ---------- */
+let STATS = null, STATS_DAYS = 30;
+async function loadStats() {
+  try { STATS = await rpc("pk_stats", { p_key: ownerKey(), p_days: STATS_DAYS }); } catch { STATS = { error: true }; }
+  if ((location.hash || "") === "#stats") route(true);
+}
+function vStats() {
+  if (!ownerKey()) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>Owner only</b><p>Sign in with the owner key on the Vendors page first.</p><a class="btn" href="#vendors">Vendors</a></div></div>`;
+  if (!STATS) { loadStats(); return `<div class="wrap"><p class="hint" style="margin-top:40px">Loading traffic…</p></div>`; }
+  if (STATS.error) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>Couldn't load traffic</b><p>Check the owner key and try again.</p></div></div>`;
+  const S2 = STATS, T = S2.totals || {}, n = x => (+x || 0).toLocaleString();
+  const tbl = (head, rows) => rows.length ? `<table class="tbl stt"><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>` : `<p class="hint" style="padding:12px 0">Nothing yet.</p>`;
+  const vName = id => esc(V[id]?.name || id);
+  const max = Math.max(1, ...(S2.by_day || []).map(d => d.visitors));
+  const bars = (S2.by_day || []).map(d => `<div class="sbar" title="${esc(d.d)}: ${d.visitors} visitors, ${d.clicks} store clicks"><i style="height:${Math.round(d.visitors / max * 100)}%"></i><b style="height:${Math.round(d.clicks / max * 100)}%"></b></div>`).join("");
+  const card = (title, inner, sub = "") => `<div class="card panel"><div class="bar"><h3>${title}</h3>${sub}</div>${inner}</div>`;
+  return `<div class="wrap">${sec("", "Owner", "Traffic and store clicks", `<span class="row" style="gap:6px">${[7, 30, 90].map(d => `<button class="chip sm" type="button" data-statdays="${d}" aria-pressed="${STATS_DAYS === d}">${d} days</button>`).join("")}</span>`)}
+    <div class="stgrid">${[["Visitors", T.visitors], ["Page views", T.views], ["Store clicks", T.clicks], ["People who clicked out", T.clickers], ["Searches", T.searches], ["On phones", (T.mobile ?? 0) + "%"]].map(([k, v]) => `<div class="card stk"><span class="lbl">${k}</span><b class="mono">${typeof v === "string" ? v : n(v)}</b></div>`).join("")}</div>
+    ${bars ? `<div class="card panel" style="margin-top:16px"><div class="bar"><h3>By day</h3><span class="hint"><i class="sw v"></i>visitors <i class="sw c"></i>store clicks</span></div><div class="sbars">${bars}</div></div>` : ""}
+    <div class="stcols" style="margin-top:16px">
+      ${card("Clicks to each store", tbl(["Store", "Clicks", "People", "Last click"], (S2.vendors || []).map(r => `<tr><td><a href="#v-${esc(r.vendor)}">${vName(r.vendor)}</a></td><td class="mono">${n(r.clicks)}</td><td class="mono">${n(r.people)}</td><td class="t3">${esc(ago(r.last))}</td></tr>`)))}
+      ${card("Most-clicked vials", tbl(["Vial", "Store", "Clicks"], (S2.vendor_items || []).slice(0, 25).map(r => `<tr><td>${esc(short(r.pep))} ${esc(sizeTxt(r.size || ""))}</td><td>${vName(r.vendor)}</td><td class="mono">${n(r.clicks)}</td></tr>`)))}
+      ${card("Where visitors come from", tbl(["Source", "Visitors"], (S2.sources || []).map(r => `<tr><td>${esc(r.source)}</td><td class="mono">${n(r.visits)}</td></tr>`)), `<span class="hint">Tag your own links: ?utm_source=facebook&amp;utm_campaign=name</span>`)}
+      ${card("Campaigns", tbl(["Source", "Medium", "Campaign", "Visitors"], (S2.campaigns || []).map(r => `<tr><td>${esc(r.src || "")}</td><td>${esc(r.med || "")}</td><td>${esc(r.camp)}</td><td class="mono">${n(r.visits)}</td></tr>`)))}
+      ${card("Landing pages", tbl(["Page", "Visitors"], (S2.landing || []).map(r => `<tr><td>${esc(r.path)}</td><td class="mono">${n(r.visits)}</td></tr>`)))}
+      ${card("Where store clicks happen", tbl(["Place", "Clicks"], (S2.placements || []).map(r => `<tr><td>${esc(r.ctx.replace(/_/g, " "))}</td><td class="mono">${n(r.clicks)}</td></tr>`)))}
+      ${card("Top pages", tbl(["Page", "Views"], (S2.pages || []).slice(0, 25).map(r => `<tr><td>${esc(r.path)}</td><td class="mono">${n(r.views)}</td></tr>`)))}
+      ${card("What people search for", tbl(["Search", "Times"], (S2.searches || []).slice(0, 25).map(r => `<tr><td>${esc(r.q)}</td><td class="mono">${n(r.n)}</td></tr>`)))}
+    </div>
+    <p class="hint" style="margin:14px 0 40px">Your own visits aren't counted while the owner key is on this browser. Bots and crawlers are skipped. No cookies or IP addresses are stored.</p></div>`;
+}
+document.addEventListener("click", e => { const b = e.target.closest?.("[data-statdays]"); if (b) { STATS_DAYS = +b.dataset.statdays; STATS = null; route(true); } });
 
 function reviewItem(r, withVendor) {
   const v = V[r.v];
@@ -1316,7 +1412,7 @@ function route(keepScroll) {
   if (h === "alerts" || h === "watchlist") { if (lastRoute !== "alerts" && lastRoute !== "watchlist") openedAt = seenAlerts(); }
   const y = scrollY; closeDD();
   chrome();
-  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : vHome();
+  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : vHome();
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
   if (h.startsWith("p-")) buyBar();
@@ -1324,8 +1420,16 @@ function route(keepScroll) {
   { const on = $(".sizes.monly [aria-checked=true]"); if (on) on.parentElement.scrollLeft = on.offsetLeft - (on.parentElement.clientWidth - on.offsetWidth) / 2; }
   if (keepScroll && lastRoute === h) scrollTo(0, y); else if (h === "catalog") $("#catalog")?.scrollIntoView(); else if (h === "seller-log") $("#slog")?.scrollIntoView(); else scrollTo(0, 0);
   lastRoute = h;
+  // The server-rendered SEO block belongs to the URL's own page; hide it once the app moves elsewhere,
+  // and move the address back to "/" so a shared link doesn't pair one page's path with another's view.
+  const seo = $("#seo"), own = seo && (seo.dataset.route === h || (seo.dataset.route === "home" && h === "home"));
+  if (seo) seo.hidden = !own;
+  if (seo && !own && location.pathname !== "/") history.replaceState(history.state, "", "/" + location.hash);
+  trackView();
   const pv = $("[data-pep]");
-  if (pv) { drawChart(pv.dataset.pep, pv.dataset.size); document.title = `${pv.dataset.pep} prices by vendor | PepSeekr`; }
+  if (pv) drawChart(pv.dataset.pep, pv.dataset.size);
+  if (own) {} else
+  if (pv) { document.title = `${pv.dataset.pep} prices by vendor | PepSeekr`; }
   else if (h.startsWith("v-") && V[h.slice(2)]) document.title = `${V[h.slice(2)].name}: score, prices, reviews | PepSeekr`;
   else document.title = { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] ? { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] + " | PepSeekr" : "PepSeekr: the peptide price index";
   if (h === "vendors" || h === "seller-log") { loadLog(); if (ownerKey()) renderOwner(); }
@@ -1501,12 +1605,23 @@ function paintFresh() {
   // pick up the new prices a few minutes after a check starts
   if (now > prev + 4 * 60000 && last < prev && freshReloadAt < prev && document.visibilityState === "visible") { freshReloadAt = now; load(); }
 }
+// Real URLs (/peptides/bpc-157, /vendors/core, /influencers/...) open the matching app view.
+function pathBoot() {
+  if (location.hash) return;
+  const p = location.pathname.replace(/\/$/, ""), seo = document.getElementById("seo")?.dataset.route;
+  let h = seo && seo !== "home" ? seo : "";
+  if (!h) { let m; if ((m = p.match(/^\/peptides\/([^/]+)/))) h = "p-" + m[1]; else if ((m = p.match(/^\/vendors\/([^/]+)/))) h = "v-" + m[1]; else if (p === "/vendors" || p === "/influencers") h = "vendors"; else if (p === "/peptides") h = "search"; }
+  if (p.startsWith("/influencers")) S.vtie = p === "/influencers";
+  if (h) history.replaceState(null, "", location.pathname + location.search + "#" + h);
+}
 (function boot() {
   resolveTheme();
   RV = store.get("pf_reviews", RV);
   const c = store.get("pf_cache", null);
   if (c) { ingest(c.d); route(); }
   else $("#view").innerHTML = `<div class="wrap"><div class="empty" style="margin-top:60px"><span class="dot"></span><p>Loading vendors and prices…</p></div></div>`;
+  pathBoot();
+  trackLand();
   load();
   authInit();
   setInterval(() => { if (document.visibilityState === "visible") load(); }, 10 * 60 * 1000);

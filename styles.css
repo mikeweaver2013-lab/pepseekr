@@ -787,3 +787,22 @@ dl.pol dt{color:var(--text-3)}
 .vtie{display:inline-flex;gap:5px;align-items:center;font-size:12.5px;color:var(--warn);margin-top:3px}
 .vtie svg{width:13px;height:13px}
 [data-vtie] svg{width:13px;height:13px;margin-right:4px;vertical-align:-2px}
+/* server-rendered SEO block (real URLs) */
+.seo{padding:40px 0 56px;border-top:1px solid var(--border);margin-top:40px;color:var(--text-2);font-size:14.5px}
+.seo h2{font-size:22px;color:var(--text);margin:0 0 10px}.seo h3{font-size:16px;color:var(--text);margin:22px 0 8px}
+.seo p{max-width:75ch;line-height:1.55;margin:8px 0}.seo a{color:var(--brand)}
+.seo-crumbs{font-size:13px;margin-bottom:10px}
+.seo-cols{columns:4 220px;column-gap:24px;list-style:none;padding:0;margin:0}.seo-cols li{break-inside:avoid;padding:3px 0}.seo-cols span{color:var(--text-3);font-size:13px}
+.seo-t{width:100%;max-width:760px;border-collapse:collapse;font-size:14px}.seo-t th,.seo-t td{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid var(--border)}.seo-t th{font-weight:600;color:var(--text-3);font-size:12.5px}
+.seo-note{font-size:12.5px;color:var(--text-3);margin-top:22px}
+@media (max-width:760px){.seo-t{font-size:13px}.seo{padding-bottom:calc(var(--tabbar-h,64px) + 40px)}}
+/* owner traffic report */
+.stgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:8px}
+.stk{padding:16px;display:grid;gap:6px}.stk b{font-size:26px}
+.stcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.stcols{grid-template-columns:minmax(0,1fr)}}
+.stt{width:100%;font-size:13.5px}.stt td,.stt th{padding:7px 8px}
+.sbars{display:flex;align-items:flex-end;gap:3px;height:120px;margin-top:12px}
+.sbar{flex:1;position:relative;height:100%;display:flex;align-items:flex-end;gap:1px}
+.sbar i{flex:1;background:var(--brand-a28);border-radius:3px 3px 0 0}.sbar b{flex:1;background:var(--data);border-radius:3px 3px 0 0}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px}.sw.v{background:var(--brand-a28)}.sw.c{background:var(--data)}
