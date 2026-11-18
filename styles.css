@@ -774,3 +774,10 @@ dl.pol dt{color:var(--text-3)}
 .cbtns .lockb{margin-left:0}
 @media (max-width:760px){.leg .rt{flex-wrap:wrap}.leg .rt .cbtns{justify-content:flex-start}}
 .ck.locked{margin-right:14px}
+/* influencer ties */
+.pill.p-tie{display:inline-flex;align-items:center;gap:4px;background:var(--warn-a14);color:var(--warn);border:1px solid transparent}
+.pill.p-tie svg{width:13px;height:13px;flex:none}
+@media (max-width:760px){.pill.p-tie .cp-t{display:none}.pill.p-tie{padding-left:6px;padding-right:6px}}
+.tie{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:14.5px;color:var(--text-2);max-width:62ch}
+.tie svg{width:16px;height:16px;flex:none;margin-top:3px;color:var(--warn)}
+.tie a{color:var(--brand);white-space:nowrap}
