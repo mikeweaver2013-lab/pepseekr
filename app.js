@@ -100,6 +100,15 @@ function ingest(d) {
   (d.vendors || []).forEach(v => { v.tier = PRIOR[v.rep_tier] ? v.rep_tier : "unrated"; V[v.id] = v; });
   ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null, coaState: a[17] || null, coaDate: a[18] || null, coaShared: a[19] || 0, cartId: a[20] || null }))
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
+  // Same compound spelled differently by different stores ("5 Amino 1MQ" / "5-Amino-1MQ", "ACE 031" / "ACE-031"):
+  // fold onto one name, the spelling most stores use (ties go to the hyphenated one). Drop names with no letters.
+  const ALIAS = { "CJC-1295 + DAC": "CJC-1295 (DAC)", "CJC 1295 + O Dac + Ipamorelin": "CJC-1295 + Ipamorelin", "Acetyl Hexapeptide, Raw": "Acetyl Hexapeptide-3", "NAD+ , Mots-c , 5-amino-1mq": "NAD+ + MOTS-c + 5-Amino-1MQ", "MOTS-c + 5-AMINO 1MQ": "MOTS-c + 5-Amino-1MQ" };
+  ROWS = ROWS.filter(r => /[a-z]/i.test(r.pep) && /^[a-z0-9]/i.test(r.pep) && !/tadalafil/i.test(r.pep));
+  ROWS.forEach(r => { if (ALIAS[r.pep]) r.pep = ALIAS[r.pep]; });
+  { const keyOf = n => n.toLowerCase().replace(/\bno\b|\bw\/o\b|without/g, "no").replace(/[^a-z0-9+]/g, "");
+    const spell = new Map(); ROWS.forEach(r => { const k = keyOf(r.pep), m = spell.get(k) || new Map(); m.set(r.pep, (m.get(r.pep) || 0) + 1); spell.set(k, m); });
+    const pick = new Map([...spell].map(([k, m]) => [k, [...m].sort((a, b) => b[1] - a[1] || (b[0].includes("-") - a[0].includes("-")) || b[0].length - a[0].length)[0][0]]));
+    ROWS.forEach(r => r.pep = pick.get(keyOf(r.pep)) || r.pep); }
   // One row per store, compound and size: some stores list the same vial under several names. Keep the
   // in-stock one, then the cheapest, then the one with a lab report.
   { const best = new Map(); ROWS.forEach(r => { const k = r.v + "|" + r.pep + "|" + r.size, o = best.get(k);
@@ -656,9 +665,21 @@ function checklistSheet() {
 }
 const chkLabel = () => CHK.size ? `Price ${CHK.size} item${CHK.size > 1 ? "s" : ""}` : "Pick at least one";
 function chkRes(q) {
-  q = q.toLowerCase(); const sel = [...CHK.keys()].map(k => k.split("|")[0]);
-  const list = PEPS.filter(p => !q || p.toLowerCase().includes(q) || short(p).toLowerCase().includes(q)).sort((a, b) => (sel.includes(b) - sel.includes(a)) || a.localeCompare(b)).slice(0, q ? 40 : 60);
-  return list.map(p => { const sizes = [...new Set(live().filter(r => r.pep === p).map(r => r.size))].sort((a, b) => parseFloat(a) - parseFloat(b)); return `<div class="srow"><span><b style="font-weight:600">${esc(p)}</b><small>${esc(catOf(p))}</small></span><span class="row" style="gap:6px;justify-content:flex-end">${sizes.slice(0, 5).map(s => { const on = CHK.has(p + "|" + s); return `<button class="chip" type="button" data-chk="${esc(p)}|${esc(s)}" aria-pressed="${on}" style="height:36px">${on ? "✓ " : ""}${esc(sizeTxt(s))}</button>`; }).join("")}</span></div>`; }).join("") || `<p class="hint">No peptides match.</p>`;
+  q = q.toLowerCase().trim();
+  const sizesOf = p => [...new Set(live().filter(r => r.pep === p).map(r => r.size))].sort((a, b) => parseFloat(a) - parseFloat(b));
+  const row = p => { const sz = sizesOf(p); if (!sz.length) return "";
+    return `<div class="crow"><div class="cn"><b>${esc(p)}</b><small>${sz.length} size${sz.length > 1 ? "s" : ""}</small></div><div class="cz">${sz.map(z => { const on = CHK.has(p + "|" + z); return `<button class="szc" type="button" data-chk="${esc(p)}|${esc(z)}" aria-pressed="${on}">${on ? "✓ " : ""}${esc(sizeTxt(z))}</button>`; }).join("")}</div></div>`; };
+  if (q) {
+    const hits = PEPS.filter(p => p.toLowerCase().includes(q) || short(p).toLowerCase().includes(q) || p.toLowerCase().replace(/[^a-z0-9]/g, "").includes(q.replace(/[^a-z0-9]/g, "")));
+    return hits.map(row).join("") || `<p class="hint" style="padding:16px 0">No compounds match "${esc(q)}".</p>`;
+  }
+  // grouped by compound family, the main families first; everything else sits behind "More compounds"
+  const groups = ALLCATS.map(c => [c, PEPS.filter(p => catOf(p) === c).sort((a, b) => a.localeCompare(b))]).filter(([, l]) => l.length);
+  const main = groups.filter(([c]) => c !== "Other" && c !== "Blends"), rest = groups.filter(([c]) => c === "Other" || c === "Blends");
+  const sec = ([c, l]) => `<div class="cgrp"><div class="lbl">${esc(c)}</div>${l.map(row).join("")}</div>`;
+  const restN = rest.reduce((a, [, l]) => a + l.length, 0);
+  return main.map(sec).join("") +
+    (S.chkMore ? rest.map(sec).join("") : `<button class="btn" type="button" data-chkmore style="width:100%;margin:12px 0">More compounds and blends (${restN})</button>`);
 }
 function parseList(txt) {
   const names = PEPS.map(p => ({ p, keys: [p, short(p), p.replace(/[-\s]/g, "")].map(k => k.toLowerCase()) })).sort((a, b) => b.p.length - a.p.length);
@@ -1076,6 +1097,7 @@ function route(keepScroll) {
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
   if (h.startsWith("p-")) buyBar();
+  { const on = $(".sizes.monly [aria-checked=true]"); if (on) on.parentElement.scrollLeft = on.offsetLeft - (on.parentElement.clientWidth - on.offsetWidth) / 2; }
   if (keepScroll && lastRoute === h) scrollTo(0, y); else if (h === "catalog") $("#catalog")?.scrollIntoView(); else if (h === "seller-log") $("#slog")?.scrollIntoView(); else scrollTo(0, 0);
   lastRoute = h;
   const pv = $("[data-pep]");
@@ -1143,6 +1165,7 @@ document.addEventListener("click", async e => {
   if (t.closest("[data-boardgo]")) { boardGo(); return; }
   if (t.closest("[data-boardopen]")) { boardOpen(); return; }
   if (t.closest("[data-showall]")) { S.stock = false; S.coa = false; S.rep = false; S.vendor = ""; saveS(); route(true); return; }
+  if (t.closest("[data-chkmore]")) { S.chkMore = true; const r = document.getElementById("chkRes"); if (r) r.innerHTML = chkRes(""); return; }
   const st = t.closest("[data-strat]"); if (st) { S.tab = st.dataset.strat; S.open = null; route(true); return; }
   if (t.closest("[data-swaps]")) { S.swaps = S.swaps === false; S.open = null; saveS(); route(true); return; }
   const it = t.closest("[data-itin]"); if (it) { const [k, m] = it.dataset.itin.split("|"); const cur = document.querySelector(".itin[aria-expanded=true] [data-itin]"); if (cur === it) return; S.open = k; S.openMode = m; route(true); return; }
