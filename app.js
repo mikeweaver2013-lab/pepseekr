@@ -1097,7 +1097,11 @@ function linkAdd() {
   saveP(); store.set("pf_watch", WATCH);
   toast(`${from === "pepkeep" ? "Your PepKeep stack: " : "Added "}${items.length} item${items.length === 1 ? "" : "s"}`, 4000);
 }
-const pkLink = () => "https://pepkeep.io/?box=" + encodeURIComponent(PROT.slice(0, 30).map(i => `${i.pep}~${String(i.size).replace(/\s+/g, "")}*${i.qty || 1}`).join(";")) + "&s=pepseekr";
+// Sends what the shown route actually buys: a size swap goes as the vials bought (2 × 5mg), not the size on the list.
+const pkLink = () => {
+  const items = CUR ? CUR.assign.map(a => ({ pep: a.item.pep, size: a.offer.swap ? a.offer.row.size : a.item.size, qty: (a.offer.swap ? a.offer.n : 1) * (a.item.qty || 1) })) : PROT;
+  return "https://pepkeep.io/?box=" + encodeURIComponent(items.slice(0, 30).map(i => `${i.pep}~${String(i.size).replace(/\s+/g, "")}*${Math.min(99, i.qty || 1)}`).join(";")) + "&s=pepseekr";
+};
 function route(keepScroll) {
   if (!D) return;
   linkAdd();
