@@ -275,13 +275,14 @@ const awBox = () => `<button type="button" class="ck awbox" role="checkbox" aria
 /* ---------- clean URLs ----------
    The app still thinks in "#route" strings (p-bpc-157, v-core, alerts...). HASH() derives that string from the real
    path, toPath() turns one back into a path, and go() navigates with history.pushState (no page reload). */
-const APP_ROUTES = /^#(home|search|vendors|sellers|list|protocol|alerts|watchlist|coa|account|stats|sales|seller-log|doc|p-[\w%-]+|v-[\w%-]+|s-[\w%-]+)(\?.*)?$/;
+const APP_ROUTES = /^#(home|search|vendors|sellers|list|protocol|alerts|watchlist|coa|account|stats|sales|seller-log|doc|p-[\w%-]+|v-[\w%-]+|s-[\w%-]+|c-[\w%-]+)(\?.*)?$/;
 function HASH() {
   const p = location.pathname.replace(/\/+$/, "") || "/", q = location.search, seo = document.getElementById("seo")?.dataset.route;
   let m, r;
   if (p === "/") r = "home";
   else if ((m = p.match(/^\/peptides\/([^/]+)$/))) r = "p-" + m[1];
   else if ((m = p.match(/^\/vendors\/([^/]+)$/))) r = "v-" + m[1];
+  else if ((m = p.match(/^\/compare\/([^/]+-vs-[^/]+)$/))) r = "c-" + m[1];
   else if ((m = p.match(/^\/vendors\/([^/]+)\/reviews$/))) return "#v-" + m[1] + (q ? q + "&" : "?") + "rv=1";   // shareable link to a store's reviews
   else if (p === "/peptides") r = "search";
   else if (p === "/influencers") r = "vendors";
@@ -298,6 +299,7 @@ function toPath(h) {
   if (r.startsWith("p-")) return "/peptides/" + r.slice(2) + qs;
   if (r.startsWith("v-") && /(^|&)rv=1(&|$)/.test(q || "")) { const rest = q.split("&").filter(x => x !== "rv=1").join("&"); return "/vendors/" + r.slice(2) + "/reviews" + (rest ? "?" + rest : ""); }
   if (r.startsWith("v-") || r.startsWith("s-")) return "/vendors/" + r.slice(2) + qs;
+  if (r.startsWith("c-")) return "/compare/" + r.slice(2) + qs;
   if (r === "protocol") return "/list" + qs;
   if (r === "sellers") return "/vendors" + qs;
   return "/" + r + qs;
@@ -583,7 +585,7 @@ function vVendor(id) {
   return `<section class="vhero"><div class="gridbg"></div><div class="wrap in">${LOGOS.has(v.id) ? `<span class="mono-tile lg"><img src="/logos/${esc(v.id)}.png" alt="${esc(v.name)} logo"></span>` : `<span class="mono-tile">${esc(v.name[0])}</span>`}<div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${cartPill(v)}${v.coaKnown ? `<span class="coa">COA ${coaPctTxt(v)}</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>${tieLine(v)}
       <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
       <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Finnrick tests"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
-    <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length} · ${scoreWord(v.score)}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
+    <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length} · ${scoreWord(v.score)}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><button class="btn" type="button" data-cmpstart="${esc(id)}">${I_SWAP} Compare</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div><button class="btn monly cmpm" type="button" data-cmpstart="${esc(id)}">${I_SWAP} Compare with another store</button></div></section>
   <div class="wrap"><div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
     ${v.promo_text ? `<div class="promo" style="margin:0"><b>${esc(v.promo_text)}</b><div class="hint" style="margin-top:2px">${esc(v.promo_detail || "")}${v.promo_ends ? " Ends " + new Date(v.promo_ends).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "." : ""}${promoOf(v) ? (promoOf(v).type === "bxgy" ? ` Prices below are the store's list price; $/mg, rankings and cart totals count the free vials (${promoOf(v).buy} paid + ${promoOf(v).get} free).` : " $/mg, rankings and cart totals include the discount.") : " Prices on PepSeekr are before this discount."}</div></div>` : ""}
     ${affNote(v)}<div class="card"><div class="phd"><div><span class="lbl">Listings</span><h3 style="font-size:17px;margin-top:4px">Best prices at ${esc(v.name)}</h3></div><span class="mono t3" style="font-size:12px">sorted by vs average</span></div>
@@ -939,15 +941,24 @@ function pasteSheet() {
     <textarea class="field" id="pasteTxt" style="height:180px;margin-top:12px" placeholder="BPC-157 10mg&#10;TB-500 5mg&#10;Retatrutide 20mg"></textarea><p class="hint" id="pastePrev" style="margin-top:8px"></p><div style="margin-top:6px">${awBox()}</div>
     <div class="sfoot"><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-pastego>Add to my list</button></div>`, "Paste your list");
 }
+// Watch picker: tap several sizes, then Save. Free accounts can hold FREE_WATCH watched vials in total.
+let WSEL = new Set();
+const wKeys = () => Object.entries(WATCH).filter(([, w]) => w && w.on).map(([k]) => k);
+function wCountTxt() {
+  if (isPro()) return `<b>${WSEL.size}</b> selected`;
+  return `<b>${WSEL.size} of ${FREE_WATCH}</b> free${WSEL.size >= FREE_WATCH ? ` · <button class="link" type="button" data-upgrade="watch">Go Pro for unlimited</button>` : ""}`;
+}
 function addSheet(mode) {
+  if (mode === "watch") WSEL = new Set(wKeys());
   openSheet(`<div class="shd"><h2>${mode === "watch" ? "Watch a peptide" : "Add an item"}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
     <label class="msearch" style="display:flex;height:48px;border:1px solid var(--border-2);border-radius:12px;align-items:center;gap:10px;padding:0 14px">${I.search.replace("<svg", '<svg style="width:18px;height:18px"')}<input id="addQ" type="search" placeholder="Search peptides" style="flex:1;border:0;background:none;outline:none;height:100%;font-size:16px" autocomplete="off" aria-label="Search peptides"></label>
-    ${mode === "watch" ? "" : `<div style="margin-top:10px">${awBox()}</div>`}<div id="addRes" class="vlist" style="margin-top:8px" data-mode="${mode || "proto"}">${addRes("", mode)}</div>`, "Add an item");
+    ${mode === "watch" ? "" : `<div style="margin-top:10px">${awBox()}</div>`}<div id="addRes" class="vlist" style="margin-top:8px" data-mode="${mode || "proto"}">${addRes("", mode)}</div>
+    ${mode === "watch" ? `<div class="sfoot wfoot"><span id="wcount" class="t2" aria-live="polite">${wCountTxt()}</span><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-wsave>Save</button></div>` : ""}`, mode === "watch" ? "Watch a peptide" : "Add an item");
   setTimeout(() => $("#addQ")?.focus(), 60);
 }
 function addRes(q, mode) {
   q = q.toLowerCase();
-  return PEPS.filter(p => !q || p.toLowerCase().includes(q)).slice(0, 30).map(p => { const sizes = [...new Set(live().filter(r => r.pep === p).map(r => r.size))].sort((a, b) => parseFloat(a) - parseFloat(b)); return `<div class="srow"><span><b style="font-weight:600">${esc(p)}</b><small>${esc(catOf(p))}</small></span><span class="row" style="gap:6px;justify-content:flex-end">${sizes.slice(0, 4).map(s => `<button class="chip" type="button" data-addpick="${esc(p)}|${esc(s)}" data-mode="${mode || "proto"}" style="height:36px">${esc(sizeTxt(s))}</button>`).join("")}</span></div>`; }).join("") || `<p class="hint">No peptides match.</p>`;
+  return PEPS.filter(p => !q || p.toLowerCase().includes(q)).slice(0, 30).map(p => { const sizes = [...new Set(live().filter(r => r.pep === p).map(r => r.size))].sort((a, b) => parseFloat(a) - parseFloat(b)); return `<div class="srow"><span><b style="font-weight:600">${esc(p)}</b><small>${esc(catOf(p))}</small></span><span class="row" style="gap:6px;justify-content:flex-end">${sizes.slice(0, 4).map(s => mode === "watch" ? `<button class="chip wpick" type="button" data-wpick="${esc(p)}|${esc(s)}" aria-pressed="${WSEL.has(p + "|" + s)}" aria-label="Watch ${esc(p)} ${esc(sizeTxt(s))}">${I.check}${esc(sizeTxt(s))}</button>` : `<button class="chip" type="button" data-addpick="${esc(p)}|${esc(s)}" data-mode="${mode || "proto"}" style="height:36px">${esc(sizeTxt(s))}</button>`).join("")}</span></div>`; }).join("") || `<p class="hint">No peptides match.</p>`;
 }
 function swapSheet(p, s) {
   const all = live().filter(r => r.pep === p).sort((a, b) => a.sv - b.sv || a.price - b.price);
@@ -1055,6 +1066,80 @@ function signupBox(src) {
     <form class="row" data-signup="${esc(src)}" style="gap:8px;margin-top:10px;flex-wrap:nowrap"><input type="email" name="email" required autocomplete="email" placeholder="you@example.com" aria-label="Email address" class="authin" style="height:44px;flex:1;min-width:0"><button class="btn p" type="submit">Sign up</button></form></div>`;
 }
 function vDoc() { return ""; }
+
+/* ---------- compare two stores: /compare/a-vs-b ---------- */
+let CMPF = "all", CMPALL = false;
+const I_SWAP = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 20l4-4-4-4"/><path d="M21 16H7"/></svg>`;
+const cmpHref = (a, b) => "#c-" + a + "-vs-" + b;
+// a store's typical price against the market average for the same vials: "30% below average"
+const avgTxt = v => { const d = Math.round((v.priceIdx - 1) * 100); return d === 0 ? "At average" : `<b class="mono">${Math.abs(d)}%</b> ${d < 0 ? "below" : "above"} average`; };
+const cartWord = v => fillsCart(v) ? (v.cart_mode === "verify_first" ? "Yes, after sign-in" : "Yes") : "No, item links";
+// cheapest in-stock row per vial at one store, priced with its deal
+function cmpBest(vid) {
+  const m = {}; ROWS.filter(r => r.v === vid && r.stock).forEach(r => { const k = r.pep + "|" + r.size; if (!m[k] || dealUnit(r) < dealUnit(m[k])) m[k] = r; }); return m;
+}
+function cmpPickSheet(fixed, side) {
+  const others = Object.values(V).filter(x => x.id !== fixed).sort((a, b) => b.score - a.score);
+  openSheet(`<div class="shd"><h2>Compare with…</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
+    <p class="t2" style="margin-top:4px">Pick a store to put next to ${esc(V[fixed].name)}.</p>
+    <div class="vlist" style="margin-top:10px">${others.map(x => `<button type="button" data-cmpgo="${esc(side === "a" ? x.id + "|" + fixed : fixed + "|" + x.id)}">${avatar(x)}<span style="flex:1;text-align:left">${esc(x.name)}</span><span class="mono t3">${x.score}</span></button>`).join("")}</div>`, "Compare stores");
+}
+function vCompare(slug) {
+  const [a, b] = slug.split("-vs-"), A = V[a], B = V[b];
+  if (!A || !B || a === b) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>Pick two stores to compare</b><p>Open any store and tap Compare.</p><a class="btn" href="/vendors">All stores</a></div></div>`;
+  const pa = cmpBest(a), pb = cmpBest(b);
+  const shared = Object.keys(pa).filter(k => pb[k]).map(k => { const ra = pa[k], rb = pb[k], ua = dealUnit(ra), ub = dealUnit(rb); return { k, pep: ra.pep, size: ra.size, ra, rb, ua, ub, d: Math.round((1 - Math.min(ua, ub) / Math.max(ua, ub)) * 100), w: Math.abs(ua - ub) < .005 ? "" : ua < ub ? "a" : "b" }; }).sort((x, y) => x.pep.localeCompare(y.pep) || parseFloat(x.size) - parseFloat(y.size));
+  const nA = shared.filter(s => s.w === "a").length, nB = shared.filter(s => s.w === "b").length;
+  const onlyA = Object.keys(pa).filter(k => !pb[k]).map(k => pa[k]), onlyB = Object.keys(pb).filter(k => !pa[k]).map(k => pb[k]);
+  const list = shared.filter(s => CMPF === "all" || s.w === CMPF), shown = CMPALL ? list : list.slice(0, 25);
+  const win = (x, y, hi = true) => x === y ? ["", ""] : (x > y) === hi ? ["cw", ""] : ["", "cw"];
+  const row = (label, va, vb, cls = ["", ""]) => `<tr><th scope="row">${label}</th><td class="${cls[0]}">${va}</td><td class="${cls[1]}">${vb}</td></tr>`;
+  const parts = [["Lab results & reviews", "rep", 45], ["Price", "price", 25], ["Lab reports", "coa", 20], ["Shipping", "ship", 10]];
+  const bar = (p, m) => `<span class="cbar sm" aria-hidden="true"><i style="width:${p / m * 100}%"></i></span>`;
+  const head = v => `<a class="cmph" href="/vendors/${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="hint">${scoreWord(v.score)} · #${v.rank}</span></span></a>`;
+  // your protocol at each store (Pro)
+  let prot = "";
+  if (!isPro()) prot = `<div class="card" style="padding:18px"><b>Your whole protocol, priced at each store</b><p class="t2" style="margin-top:6px">See what everything on your list costs at ${esc(A.name)} and at ${esc(B.name)}, deals and shipping included, and what each one is missing.</p><div style="margin-top:12px">${proLock("protocol", "See my protocol here")}</div></div>`;
+  else if (!PROT.length) prot = `<div class="card" style="padding:18px"><b>Add your protocol to price it at each store</b><p class="t2" style="margin-top:6px">Your list is empty.</p><a class="btn" style="margin-top:12px" href="/list">Build my list</a></div>`;
+  else {
+    const at = (vid, best) => { let sub = 0; const miss = []; PROT.forEach(i => { const r = best[i.pep + "|" + i.size]; if (r) sub += lineCost({ v: vid, price: r.price, row: r, n: 1 }, i.qty); else miss.push(i); }); const v = V[vid], unknown = v.ship_flat == null && v.free_ship_over == null, ship = shipCost(v, sub); return { sub, miss, ship, unknown, tot: sub + ship }; };
+    const ta = at(a, pa), tb = at(b, pb), better = ta.miss.length !== tb.miss.length ? (ta.miss.length < tb.miss.length ? "a" : "b") : ta.tot < tb.tot ? "a" : "b";
+    const col = (v, t, me) => `<div class="card cmpp ${better === me ? "best" : ""}" style="padding:16px"><div class="lbl">${esc(v.name)}${better === me ? ` · <span class="data">Better fit</span>` : ""}</div><b class="mono" style="font-size:24px;display:block;margin-top:6px">${money2(t.tot)}</b><span class="hint">${PROT.length - t.miss.length} of ${PROT.length} items${t.unknown ? " · plus shipping at checkout" : t.ship ? ` · incl. ${money2(t.ship)} shipping` : " · free shipping"}</span>${t.miss.length ? `<p class="hint" style="margin-top:8px">Not here: ${t.miss.map(i => esc(short(i.pep) + " " + sizeTxt(i.size))).join(", ")}</p>` : ""}</div>`;
+    prot = `<div class="g2c">${col(A, ta, "a")}${col(B, tb, "b")}</div><p class="hint" style="margin-top:8px">Store deals are counted. Ready to buy? <a class="link" href="/list">Open my list</a> and pick the one-store route.</p>`;
+  }
+  const chips = [["all", `All ${shared.length}`], ["a", `Cheaper at ${short(A.name)} · ${nA}`], ["b", `Cheaper at ${short(B.name)} · ${nB}`]];
+  const vialRow = s => `<li class="cmpv"><a class="cn" href="${pHref(s.pep, s.size)}"><b>${esc(short(s.pep))}</b> <span class="mono t3">${esc(sizeTxt(s.size))}</span></a><span class="cp ${s.w === "a" ? "cw" : ""}">${money2(s.ua)}${s.w === "a" ? `<small>−${s.d}%</small>` : ""}</span><span class="cp ${s.w === "b" ? "cw" : ""}">${money2(s.ub)}${s.w === "b" ? `<small>−${s.d}%</small>` : ""}</span></li>`;
+  const onlyList = (v, l) => `<details class="card cmpo"><summary><b>Only at ${esc(v.name)}</b> <span class="mono t3">${l.length}</span></summary><div class="cmpchips">${l.sort((x, y) => x.pep.localeCompare(y.pep)).map(r => `<a class="chip" href="${pHref(r.pep, r.size, r.v)}">${esc(short(r.pep))} <span class="mono t3">${esc(sizeTxt(r.size))}</span></a>`).join("") || `<span class="t3">Nothing</span>`}</div></details>`;
+  return `<div class="wrap cmp">
+    <div class="sec" style="margin-top:24px"><div><span class="kick"><span class="lbl">Compare stores</span></span><h1 class="h1" style="margin-top:10px">${esc(A.name)} vs ${esc(B.name)}</h1></div></div>
+    <div class="cmphead card"><div class="cmps">${head(A)}<button class="btn sm" type="button" data-cmpchange="a|${esc(b)}">Change</button></div><button class="ib cmpswap" type="button" data-cmpswap="${esc(b)}|${esc(a)}" aria-label="Swap sides">${I_SWAP}</button><div class="cmps">${head(B)}<button class="btn sm" type="button" data-cmpchange="b|${esc(a)}">Change</button></div></div>
+    <nav class="hs cmpnav" aria-label="Jump to"><button class="chip" type="button" data-cmpjump="cmp-score">Scores</button><button class="chip" type="button" data-cmpjump="cmp-prices">Prices · ${shared.length}</button><button class="chip" type="button" data-cmpjump="cmp-prot">My protocol</button><button class="chip" type="button" data-cmpjump="cmp-only">Only at one</button></nav>
+
+    <section id="cmp-score" style="margin-top:18px"><h2 class="h2">Scores and store facts</h2>
+    <div class="card" style="margin-top:10px;overflow-x:auto"><table class="cmpt"><thead><tr><th scope="col"><span class="vh">Part</span></th><th scope="col">${esc(short(A.name))}</th><th scope="col">${esc(short(B.name))}</th></tr></thead><tbody>
+      ${row("<b>Score</b>", `<b class="mono">${A.score}</b> <span class="hint">${scoreWord(A.score)}</span>`, `<b class="mono">${B.score}</b> <span class="hint">${scoreWord(B.score)}</span>`, win(A.score, B.score))}
+      ${parts.map(([t, k, m]) => row(t, `<span class="mono">${A.pts[k]}/${m}</span>${bar(A.pts[k], m)}`, `<span class="mono">${B.pts[k]}/${m}</span>${bar(B.pts[k], m)}`, win(A.pts[k], B.pts[k]))).join("")}
+      ${row("Prices vs market average", avgTxt(A), avgTxt(B), win(A.priceIdx, B.priceIdx, false))}
+      ${row("Independent lab tests", A.finnrick_pct != null ? A.finnrick_pct + "%" : "None yet", B.finnrick_pct != null ? B.finnrick_pct + "%" : "None yet", win(A.finnrick_pct ?? -1, B.finnrick_pct ?? -1))}
+      ${row("Verified reviews", A.rvN ? `★ ${A.rvAvg.toFixed(1)} (${A.rvN})` : "None yet", B.rvN ? `★ ${B.rvAvg.toFixed(1)} (${B.rvN})` : "None yet")}
+      ${row("Lab reports", coaPctTxt(A), coaPctTxt(B))}
+      ${row("Shipping", esc(shipText(A)), esc(shipText(B)))}
+      ${row("Deal now", promoShort(A) ? esc(promoShort(A)) : "—", promoShort(B) ? esc(promoShort(B)) : "—")}
+      ${row("Fill my cart", cartWord(A), cartWord(B))}
+      ${row("In stock", `${Object.keys(pa).length} vials`, `${Object.keys(pb).length} vials`, win(Object.keys(pa).length, Object.keys(pb).length))}
+    </tbody></table></div></section>
+
+    <section id="cmp-prices" style="margin-top:22px"><h2 class="h2">Same vial, both stores</h2>
+    <p class="t2" style="margin-top:4px">${shared.length ? `${esc(A.name)} is cheaper on ${nA}, ${esc(B.name)} on ${nB}${shared.length - nA - nB ? `, same price on ${shared.length - nA - nB}` : ""}. Prices per vial with each store's deal.` : "These two stores don't carry any of the same vials in stock right now."}</p>
+    ${shared.length ? `<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">${chips.map(([k, t]) => `<button class="chip" type="button" data-cmpf="${k}" aria-pressed="${CMPF === k}">${esc(t)}</button>`).join("")}</div>
+    <div class="card" style="margin-top:10px"><div class="cmpv cmpvh" aria-hidden="true"><span>Vial</span><span>${esc(short(A.name))}</span><span>${esc(short(B.name))}</span></div><ul class="cmpl">${shown.map(vialRow).join("")}</ul>${list.length > shown.length ? `<button class="btn full" type="button" data-cmpall style="margin:10px 0 4px">Show all ${list.length}</button>` : ""}</div>` : ""}</section>
+
+    <section id="cmp-prot" style="margin-top:22px"><h2 class="h2">My protocol at each store</h2><div style="margin-top:10px">${prot}</div></section>
+
+    <section id="cmp-only" style="margin-top:22px;margin-bottom:32px"><h2 class="h2">Only at one of them</h2><div style="display:grid;gap:10px;margin-top:10px">${onlyList(A, onlyA)}${onlyList(B, onlyB)}</div>
+    <div class="row" style="gap:10px;margin-top:16px;flex-wrap:wrap"><a class="btn" href="${esc(A.url)}" target="_blank" rel="noopener">Visit ${esc(A.name)} ${I.ext}</a><a class="btn" href="${esc(B.url)}" target="_blank" rel="noopener">Visit ${esc(B.name)} ${I.ext}</a></div></section>
+  </div>`;
+}
 
 /* ---------- write a review (3 steps) ---------- */
 let RW = null;
@@ -1635,7 +1720,7 @@ function route(keepScroll) {
     if (pep && hq.get("s")) curSize[pep] = hq.get("s");
     FOCUS_V = hq.get("v") || null;
   } else if (!h.startsWith("p-")) FOCUS_V = null;
-  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : h === "sales" ? vSales() : h === "doc" ? vDoc() : vHome();
+  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("c-") ? vCompare(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : h === "sales" ? vSales() : h === "doc" ? vDoc() : vHome();
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
   if (h.startsWith("p-")) buyBar();
@@ -1653,6 +1738,7 @@ function route(keepScroll) {
   if (pv && FOCUS_V && !keepScroll) setTimeout(() => { const el = [...document.querySelectorAll("[data-ov].focus")].find(e => e.offsetParent); el?.scrollIntoView({ block: "center", behavior: "smooth" }); }, 120);
   if (own) {} else
   if (pv) { document.title = `${pv.dataset.pep} prices by vendor | PepSeekr`; }
+  else if (h.startsWith("c-")) { const [ca, cb] = h.slice(2).split("-vs-"); if (V[ca] && V[cb]) document.title = `${V[ca].name} vs ${V[cb].name}: prices, scores, shipping | PepSeekr`; }
   else if (h.startsWith("v-") && V[h.slice(2)]) document.title = `${V[h.slice(2)].name}: score, prices, reviews | PepSeekr`;
   else document.title = { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] ? { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] + " | PepSeekr" : "PepSeekr: the peptide price index";
   if (h === "vendors" || h === "seller-log") { loadLog(); if (ownerKey()) renderOwner(); }
@@ -1712,11 +1798,34 @@ document.addEventListener("click", async e => {
   if (t.closest("[data-markread]")) { store.set("pf_seen_alerts", Date.now()); openedAt = Date.now(); closeDD(); route(true); return; }
   const af = t.closest("[data-afilt]"); if (af) { afilt = af.dataset.afilt; route(true); return; }
   const as = t.closest("[data-aseg]"); if (as) { go("#" + as.dataset.aseg); return; }
+  // compare two stores
+  const cs = t.closest("[data-cmpstart]"); if (cs) { cmpPickSheet(cs.dataset.cmpstart, "b"); return; }
+  const cc = t.closest("[data-cmpchange]"); if (cc) { const [side, keep] = cc.dataset.cmpchange.split("|"); cmpPickSheet(keep, side); return; }
+  const cg = t.closest("[data-cmpgo]"); if (cg) { const [x, y] = cg.dataset.cmpgo.split("|"); CMPF = "all"; CMPALL = false; go(cmpHref(x, y)); return; }
+  const cw = t.closest("[data-cmpswap]"); if (cw) { const [x, y] = cw.dataset.cmpswap.split("|"); CMPF = CMPF === "a" ? "b" : CMPF === "b" ? "a" : "all"; go(cmpHref(x, y), true); return; }
+  const cf = t.closest("[data-cmpf]"); if (cf) { CMPF = cf.dataset.cmpf; CMPALL = false; route(true); return; }
+  if (t.closest("[data-cmpall]")) { CMPALL = true; route(true); return; }
+  const cj = t.closest("[data-cmpjump]"); if (cj) { document.getElementById(cj.dataset.cmpjump)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   // protocol (Pro only)
-  if (!isPro() && t.closest("[data-imp],[data-pastego],[data-addlist],[data-checklist],[data-chkgo],[data-strat],[data-swaps]")) { e.preventDefault(); e.stopPropagation(); upgradeSheet("protocol"); return; }
+  if (!isPro() && t.closest("[data-imp],[data-pastego],[data-addlist],[data-checklist],[data-chkgo],[data-strat],[data-swaps],[data-addpick]:not([data-mode=watch])")) { e.preventDefault(); e.stopPropagation(); upgradeSheet("protocol"); return; }
   const im = t.closest("[data-imp]"); if (im) { if (im.tagName === "A") { if (im.dataset.imp === "paste") setTimeout(pasteSheet, 50); else setTimeout(() => $("#pdfIn")?.click(), 120); return; } e.preventDefault(); pasteSheet(); return; }
   if (t.closest("[data-pastego]")) { const f = parseList($("#pasteTxt").value); if (!f.length) { $("#pastePrev").textContent = "We didn't recognize any compounds. Check the spelling, one per line."; return; } const n = addItems(f); closeSheet(); if (HASH() !== "#list") go("#list"); else route(); toast(`Added ${n} item${n === 1 ? "" : "s"} to your list`); return; }
   const ai = t.closest("[data-additem]"); if (ai) { addSheet(ai.dataset.additem); return; }
+  const wp = t.closest("[data-wpick]"); if (wp) {
+    const k = wp.dataset.wpick;
+    if (WSEL.has(k)) WSEL.delete(k);
+    else if (!isPro() && WSEL.size >= FREE_WATCH) { toast(`Free accounts watch up to ${FREE_WATCH} vials. Unselect one, or go Pro for unlimited.`); return; }
+    else WSEL.add(k);
+    wp.setAttribute("aria-pressed", WSEL.has(k)); const c = $("#wcount"); if (c) c.innerHTML = wCountTxt(); return;
+  }
+  if (t.closest("[data-wsave]")) {
+    const before = new Set(wKeys()); let added = 0, removed = 0;
+    WSEL.forEach(k => { if (!before.has(k)) { WATCH[k] = { target: null, on: true, drop: true, restock: true, sale: true }; added++; } });
+    before.forEach(k => { if (!WSEL.has(k)) { delete WATCH[k]; removed++; } });
+    saveW(); closeSheet(); route(true);
+    toast(added || removed ? `Watching ${WSEL.size} vial${WSEL.size === 1 ? "" : "s"}${added ? ` · ${added} added` : ""}${removed ? ` · ${removed} removed` : ""}` : "No changes");
+    return;
+  }
   const ap = t.closest("[data-addpick]"); if (ap) { const [p, s] = ap.dataset.addpick.split("|"); if (ap.dataset.mode === "watch") { WATCH[p + "|" + s] = { target: null, on: true, drop: true, restock: true, sale: true }; saveW(); toast(`Watching ${short(p)} ${sizeTxt(s)}`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}`); } closeSheet(); route(true); return; }
   const al2 = t.closest("[data-addlist]"); if (al2) { const [p, s] = al2.dataset.addlist.split("|"); if (PROT.some(i => i.pep === p && i.size === s)) { PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)} from your list`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}. See the cheapest cart in Protocol.`); } route(true); return; }
   if (t.closest("[data-one]")) { S.one = !S.one; S.open = null; saveS(); route(true); return; }

@@ -117,6 +117,10 @@
       "destination": "/api/seo?t=vendors"
     },
     {
+      "source": "/compare/:slug",
+      "destination": "/api/seo?t=cmp&s=:slug"
+    },
+    {
       "source": "/vendors/:id/reviews",
       "destination": "/api/seo?t=v&s=:id&r=1"
     },

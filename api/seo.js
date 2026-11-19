@@ -283,5 +283,19 @@ function build(t, s, C) {
       ${note(at)}`;
     return { path: "/influencers/" + s, route: "v-" + stores[0].id, title: `${I.name} peptides: ${stores.map(v => v.name).join(" & ")} prices compared | PepSeekr`, desc: `${I.name} is linked to ${stores.map(v => v.name).join(" and ")}. See their peptide prices next to the cheapest store for each vial.`, body, ld: [crumbs([["PepSeekr", "/"], ["Creator-linked stores", "/influencers"], [I.name, "/influencers/" + s]])] };
   }
+  // /compare/a-vs-b: two stores side by side (list prices; the app adds deal math, scores and the protocol)
+  if (t === "cmp") {
+    const [a, b] = s.split("-vs-"), A = V[a], B = V[b];
+    if (!A || !B || a === b) return null;
+    const best = id => { const m = {}; live.filter(r => r.v === id).forEach(r => { const k = r.pep + "|" + r.size; if (!m[k] || r.price < m[k].price) m[k] = r; }); return m; };
+    const pa = best(a), pb = best(b), keys = Object.keys(pa).filter(k => pb[k]).sort();
+    const nA = keys.filter(k => pa[k].price < pb[k].price).length, nB = keys.filter(k => pb[k].price < pa[k].price).length;
+    const tr = keys.slice(0, 120).map(k => `<tr><td>${pLink(pa[k].pep)} ${esc(sizeTxt(pa[k].size))}</td><td>${money(pa[k].price)}</td><td>${money(pb[k].price)}</td></tr>`).join("");
+    const body = `<nav class="seo-crumbs"><a href="/">PepSeekr</a> › <a href="/vendors">Stores</a> › ${esc(A.name)} vs ${esc(B.name)}</nav>
+      <h2>${esc(A.name)} vs ${esc(B.name)}: prices, lab tests and shipping</h2>
+      <p>${keys.length ? `Both stores have ${keys.length} of the same vials in stock. ${vLink(A)} is cheaper on ${nA} and ${vLink(B)} on ${nB}, at list price.` : `${vLink(A)} and ${vLink(B)} don't have any of the same vials in stock right now.`} ${Object.keys(pa).length - keys.length} vials are only at ${esc(A.name)} and ${Object.keys(pb).length - keys.length} only at ${esc(B.name)}.</p>
+      ${keys.length ? `<table class="seo-t"><thead><tr><th>Vial</th><th>${esc(A.name)}</th><th>${esc(B.name)}</th></tr></thead><tbody>${tr}</tbody></table>` : ""}${note(at)}`;
+    return { path: "/compare/" + a + "-vs-" + b, route: "c-" + a + "-vs-" + b, title: `${A.name} vs ${B.name}: prices, scores, shipping | PepSeekr`, desc: `${A.name} vs ${B.name}: ${keys.length} shared vials compared at list price, plus lab tests, reviews, shipping and deals. Updated every 2 hours.`, body, ld: [crumbs([["PepSeekr", "/"], ["Stores", "/vendors"], [`${A.name} vs ${B.name}`, "/compare/" + a + "-vs-" + b]])] };
+  }
   return null;
 }
