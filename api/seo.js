@@ -42,7 +42,7 @@ ${(p.ld || []).map(o => `<script type="application/ld+json">${JSON.stringify(o).
 const crumbs = list => ({ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: list.map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, item: SITE + path })) });
 const pLink = p => `<a href="/peptides/${slugOf(p)}">${esc(p)}</a>`;
 const vLink = v => `<a href="/vendors/${esc(v.id)}">${esc(v.name)}</a>`;
-const note = at => `<p class="seo-note">Prices are pulled from each store's own site every 2 hours. Last check: ${esc(fmtDate(at))}. PepSeekr doesn't sell peptides or take a cut from stores. Products listed are sold by stores as research compounds; confirm price, stock and lab reports on the store's site.</p>`;
+const note = at => `<p class="seo-note">Prices are pulled from each store's own site every 2 hours. Last check: ${esc(fmtDate(at))}. PepSeekr doesn't sell peptides, and no store can pay for placement or rank. Products listed are sold by stores as research compounds; confirm price, stock and lab reports on the store's site.</p>`;
 
 const howTo = p => `<h3>How to compare ${esc(p)} listings</h3><ol class="seo-steps">
   <li><b>Start with price per mg.</b> It makes different vial sizes comparable.</li>
@@ -68,12 +68,14 @@ const DOCS = {
     <p><b>Why no store is above about 80 yet:</b> reputation is the biggest part, and a 4-star rating earns 20 of its 40 points. Right now most stores sit near 4 stars because verified buyer reviews are only just starting. A store has to earn the top of that range through strong lab results and buyers who confirm it, so the high scores are still open.</p>
     <p>Prices and trust are shown separately too, so the cheapest store is never presented as the most trustworthy one, or the reverse.</p>
     <h3>Creator ties</h3><p>Where a store is owned by, or promoted by, a creator or podcaster, we say so on the store page with the date we checked and a link to the source. If a tie is wrong or out of date, <a href="/contact?topic=correction">tell us</a> and we'll review it.</p>
-    <h3>Money</h3><p>PepSeekr doesn't sell peptides, doesn't take a cut from stores and doesn't accept payment for placement. <b>Rankings are never for sale.</b> PepSeekr Pro is a paid subscription for extra features; it never changes prices, scores or order.</p>`],
+    <h3 id="stores">How we pick stores</h3><p>We keep looking for the most reliable stores and leave out the ones that aren't. Twice a week we check for new stores, and a store is only added if it clears our bar: independent lab tests at 70% or better across at least 3 tests (or a current lab report on most of its products), a real storefront with visible prices and normal checkout, real contact details, and no health or dosing claims. Copycats of closed brands and stores with scam flags are left out. We recheck the stores we list against the same bar and remove the ones that fall below it.</p>
+    <h3>For stores: how to raise your score</h3><p>Every point comes from things a store controls. Get products tested independently (Finnrick tests samples, including ones buyers send in). Put a current, batch-matched lab report on every product page. Keep prices competitive with the same vial elsewhere. Offer free shipping at a reachable order size. And encourage buyers to leave verified reviews on PepSeekr. Paying us is not one of the ways; there isn't one.</p>
+    <h3 id="money">How PepSeekr makes money</h3><p>PepSeekr doesn't sell peptides and doesn't accept payment for placement. <b>Rankings are never for sale.</b> Some store links are affiliate links: if you buy through them, the store may pay PepSeekr a commission. That never changes prices, scores, the order stores appear in or which store we recommend, and a store that pays us is marked on its page. When a store gives us a discount code for our visitors, we show it and count it in the price. PepSeekr Pro is a paid subscription for extra features; it never changes prices, scores or order.</p>`],
   about: ["About PepSeekr", "PepSeekr is an independent price comparison for research peptides, updated every 2 hours.", `
     <h2>About PepSeekr</h2>
     <p>PepSeekr shows research peptide prices from every store we can read, side by side, with price per mg, stock, shipping and lab reports, refreshed every 2 hours.</p>
     <p>We built it because the same vial can cost three times as much from one store to the next, and comparing by hand means a dozen tabs and a calculator.</p>
-    <p>PepSeekr doesn't sell anything, doesn't test products and doesn't take a cut from stores. See <a href="/method">how it works</a>, or <a href="/contact">get in touch</a>.</p>`],
+    <p>PepSeekr doesn't sell anything or test products, and no store can pay for placement or rank. See <a href="/method">how it works</a>, or <a href="/contact">get in touch</a>.</p>`],
   terms: ["Terms of use", "The terms for using PepSeekr.", `
     <h2>Terms of use</h2><p class="seo-note">Last updated November 18, 2026.</p>
     <p>By using pepseekr.com you agree to these terms.</p>
@@ -167,7 +169,7 @@ function build(t, s, C) {
       </table>
       <h3 class="prc-sub">Questions</h3>
       <div class="seo-faq">${faqs.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("")}</div>
-      <p class="prc-fine" style="margin-top:18px">Prices in US dollars. PepSeekr doesn't sell peptides and takes no cut from stores. <a href="/method">How PepSeekr works</a></p>
+      <p class="prc-fine" style="margin-top:18px">Prices in US dollars. PepSeekr doesn't sell peptides, and no store can pay for placement or rank. <a href="/method">How PepSeekr works</a></p>
     </div>`;
     const ld = [crumbs([["PepSeekr", "/"], ["Pricing", "/pricing"]]),
       { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faqs.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) },
@@ -216,7 +218,7 @@ function build(t, s, C) {
       [`What does price per mg mean for ${p}?`, `It's the vial price divided by the amount in the vial, so different sizes can be compared fairly.${perMg.length ? ` In-stock ${p} listings currently run from ${money(perMg[0])} to ${money(perMg[perMg.length - 1])} per ${rows[0].unit || "mg"}.` : ""}`],
       [`How do I check a ${p} lab report (COA)?`, "Open the certificate on the store's page and check that it names the lab that ran it, that the lot number matches the vial you'd receive, that the test date is recent, and that it's for this exact compound and size. PepSeekr marks listings with a linked report and flags reports that look reused or old, but doesn't test products itself."],
       ["How often are prices updated?", "Every 2 hours, around the clock. Each page shows when prices were last checked."],
-      ["Does PepSeekr sell peptides or test them?", "No. PepSeekr is a price comparison. It doesn't sell anything, doesn't test products, and doesn't take a cut from stores. Rankings are never for sale."],
+      ["Does PepSeekr sell peptides or test them?", "No. PepSeekr is a price comparison. It doesn't sell anything or test products. Some store links may earn a commission, but rankings are never for sale and no store can pay to move up."],
     ];
     const body = `<nav class="seo-crumbs"><a href="/">PepSeekr</a> › <a href="/peptides">Peptides</a> › ${esc(p)}</nav>
       <h2>${esc(p)} prices: ${vendorsN} store${vendorsN === 1 ? "" : "s"} compared</h2>
