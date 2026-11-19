@@ -15,6 +15,8 @@ export default async function handler(req) {
   const u = new URL(req.url), t = u.searchParams.get("t") || "home", s = (u.searchParams.get("s") || "").toLowerCase();
   const [shell, C] = await Promise.all([fetch(new URL("/shell.html", u.origin)).then(r => r.text()), loadCatalog()]);
   const page = build(t, s, C);
+  // /vendors/:id/reviews: the same store page, titled and described for sharing its reviews
+  if (page && t === "v" && u.searchParams.get("r") === "1") Object.assign(page, { path: page.path + "/reviews", title: `${page.vname} reviews from verified buyers | PepSeekr`, desc: `Read verified buyer reviews of ${page.vname}, or leave your own. Every review on PepSeekr is checked against a receipt. No store can pay for rank.` });
   if (!page) return html(inject(shell, { title: "Page not found | PepSeekr", desc: "This page isn't on PepSeekr.", path: u.pathname, noindex: true, body: `<h1>Page not found</h1><p><a href="/peptides">Browse every peptide</a> or <a href="/vendors">every store</a>.</p>`, route: "home" }), 404);
   return html(inject(shell, page), 200);
 }
@@ -272,7 +274,7 @@ function build(t, s, C) {
         <p>We track ${T.l.length} listings at ${esc(v.name)}.${facts.length ? " " + esc(facts.join("; ")) + "." : ""}${T.n ? ` Across the ${T.n} in-stock vials another store also carries, the cheapest alternative is ${T.save > 0 ? `${T.save}% lower in total` : "the same or higher"}.` : ""}</p>
         ${v.tie_text ? `<p>${esc(v.tie_text)}.${v.tie_url ? ` <a href="${esc(v.tie_url)}" rel="nofollow noopener">Source</a>` : ""}${v.tie_checked ? ` Checked ${esc(v.tie_checked)}.` : ""} <a href="/contact?topic=correction&amp;about=${esc(v.id)}">Report a correction</a></p>` : ""}
         ${T.html}${note(at)}`;
-      return { path: "/vendors/" + v.id, route: "v-" + v.id, title: `${v.name} review: prices, lab tests & cheaper alternatives | PepSeekr`, desc: `${v.name}: ${T.l.length} research peptide listings compared with every other store${v.finnrick_pct != null ? `, ${v.finnrick_pct}% lab-test pass rate` : ""}. See where each vial is cheaper.`, body, ld: [crumbs([["PepSeekr", "/"], ["Stores", "/vendors"], [v.name, "/vendors/" + v.id]])] };
+      return { vname: v.name, path: "/vendors/" + v.id, route: "v-" + v.id, title: `${v.name} review: prices, lab tests & cheaper alternatives | PepSeekr`, desc: `${v.name}: ${T.l.length} research peptide listings compared with every other store${v.finnrick_pct != null ? `, ${v.finnrick_pct}% lab-test pass rate` : ""}. See where each vial is cheaper.`, body, ld: [crumbs([["PepSeekr", "/"], ["Stores", "/vendors"], [v.name, "/vendors/" + v.id]])] };
     }
     const I = INF[s], parts = stores.map(v => ({ v, T: storeTable(v) }));
     const body = `<nav class="seo-crumbs"><a href="/">PepSeekr</a> › <a href="/influencers">Creator-linked stores</a> › ${esc(I.name)}</nav>

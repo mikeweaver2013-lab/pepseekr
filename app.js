@@ -37,6 +37,7 @@ const I = {
   moon: ic(`<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>`),
   home: ic(`<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>`),
   dl: ic(`<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>`),
+  share: ic(`<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v8h14v-8"/>`),
   cam: ic(`<path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>`),
   file: ic(`<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h6"/>`),
   paste: ic(`<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="M9 12h6M9 16h4"/>`),
@@ -245,6 +246,8 @@ const theirRev = (v, txt) => v.site_reviews_url ? `<a class="link" href="${esc(v
 const mktTxt = v => { const d = Math.round((v.priceIdx - 1) * 100); return d === 0 ? "at market" : (d < 0 ? "−" + -d + "%" : "+" + d + "%") + " vs market"; };
 function shipText(v) { const b = []; if (v.ship_flat != null) b.push(money(+v.ship_flat) + " flat"); if (v.free_ship_over != null) b.push("free over " + money(+v.free_ship_over)); return b.join(", ") || "Shown at checkout"; }
 const poss = n => n + (/s$/i.test(n) ? "'" : "'s");
+// the link a store (or anyone) can share to send buyers straight to its reviews
+const reviewsUrl = id => location.origin + "/vendors/" + encodeURIComponent(id) + "/reviews";
 const coaPctTxt = v => !v.coaKnown ? "n/a" : v.coaChecked < v.count * 0.75 ? `${v.coaPct}% of ${v.coaChecked} checked` : v.coaPct + "%";
 // store logos saved on our own server (site/logos/<id>.png); a letter tile when we don't have one
 const LOGOS = new Set(["aavant", "ascension", "atomik", "behemoth", "biolongevity", "biostrategix", "biotech", "certifiedpep", "core", "evolve", "ezpeptides", "gentleman", "gila", "glacier", "hvy", "ionpeptide", "ldaminos", "milehigh", "modernaminos", "newbiorx", "nura", "paramount", "patriot", "pepshop", "primepeptides", "puratek", "stl", "swisschems", "thepeptideshop"]);
@@ -279,6 +282,7 @@ function HASH() {
   if (p === "/") r = "home";
   else if ((m = p.match(/^\/peptides\/([^/]+)$/))) r = "p-" + m[1];
   else if ((m = p.match(/^\/vendors\/([^/]+)$/))) r = "v-" + m[1];
+  else if ((m = p.match(/^\/vendors\/([^/]+)\/reviews$/))) return "#v-" + m[1] + (q ? q + "&" : "?") + "rv=1";   // shareable link to a store's reviews
   else if (p === "/peptides") r = "search";
   else if (p === "/influencers") r = "vendors";
   else if (p.startsWith("/influencers/")) r = seo && seo.startsWith("v-") ? seo : "vendors";
@@ -292,6 +296,7 @@ function toPath(h) {
   const [r, q] = h.replace(/^#/, "").split("?"), qs = q ? "?" + q : "";
   if (r === "home") return "/" + qs;
   if (r.startsWith("p-")) return "/peptides/" + r.slice(2) + qs;
+  if (r.startsWith("v-") && /(^|&)rv=1(&|$)/.test(q || "")) { const rest = q.split("&").filter(x => x !== "rv=1").join("&"); return "/vendors/" + r.slice(2) + "/reviews" + (rest ? "?" + rest : ""); }
   if (r.startsWith("v-") || r.startsWith("s-")) return "/vendors/" + r.slice(2) + qs;
   if (r === "protocol") return "/list" + qs;
   if (r === "sellers") return "/vendors" + qs;
@@ -585,7 +590,7 @@ function vVendor(id) {
       <div class="row" style="gap:10px;padding:0 18px 12px;flex-wrap:wrap">${ck("stock", "In stock only")}<span class="hint">${S.stock ? (soldOut ? `${soldOut} sold-out listing${soldOut === 1 ? "" : "s"} hidden` : "Everything here is in stock") : (soldOut ? `${soldOut} sold out, marked below` : "Everything here is in stock")}</span></div>
       <table class="tbl offers"><thead><tr><th>Peptide</th><th>Price</th><th>$/mg</th><th>vs average</th><th>COA</th><th></th><th></th></tr></thead><tbody>${listings.slice(0, 40).map(r => { const d = Math.round((r.vsMed * dealUnit(r) / r.price - 1) * 100); return `<tr class="${r.stock ? "" : "oos"}"><td><a href="${pHref(r.pep, r.size, r.v)}"><b>${esc(r.pep)}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></a></td><td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.stock ? "" : ` <span class="pill p-n">Sold out</span>`}${promoOf(v) ? `<div class="dealnote">${esc(dealNote(r))}</div>` : ""}</td><td class="mono">${money2(eff(r) / r.sv)}</td><td class="mono ${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td><a class="btn sm" href="${esc(r.url || v.url)}" target="_blank" rel="noopener" aria-label="Buy ${esc(r.pep)} ${esc(sizeTxt(r.size))} at ${esc(v.name)}">Buy ${I.ext || "↗"}</a></td><td><button class="watch" style="position:static" type="button" data-watch="${esc(r.pep)}" data-size="${esc(r.size)}" aria-pressed="${isW(r.pep, r.size)}" aria-label="Watch ${esc(r.pep)} ${esc(r.size)}">${I.star}</button></td></tr>`; }).join("")}</tbody></table>
       <ul class="ocards monly" style="padding:12px">${listings.slice(0, 20).map(r => `<li class="card ocard"><a class="t" href="${pHref(r.pep, r.size, r.v)}"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))}</b><span class="hint" style="display:block">${esc(sizeTxt(r.size))}${r.stock ? "" : ` · <b class="warn">Sold out</b>`}</span></span><span class="px"><b>${money2(r.price)}</b><span class="${r.vsMed < 1 ? "data" : ""}">${r.vsMed < 1 ? "−" + Math.round((1 - r.vsMed) * 100) + "% vs avg" : money2(r.ppu) + "/mg"}</span></span></a><a class="btn sm vbuy" href="${esc(r.url || v.url)}" target="_blank" rel="noopener" aria-label="Buy ${esc(r.pep)} ${esc(sizeTxt(r.size))} at ${esc(v.name)}">Buy ${I.ext || "↗"}</a></li>`).join("")}</ul></div>
-    <div class="card panel"><div class="bar"><h3>Verified buyer reviews</h3><button class="btn sm p" type="button" data-review="${esc(id)}">Review ${esc(v.name)}</button></div>
+    <div class="card panel" id="reviews"><div class="bar"><h3>Verified buyer reviews</h3><div class="row" style="gap:8px"><button class="btn sm" type="button" data-rvshare="${esc(id)}" aria-label="Share the link to ${esc(v.name)} reviews">${I.share || ""}Share</button><button class="btn sm p" type="button" data-review="${esc(id)}">Review ${esc(v.name)}</button></div></div>
       <div class="row" style="margin:12px 0 4px;gap:8px">${[["recent", "Most recent"], ["5", "5★"], ["ship", "Shipping"], ["coa", "COA match"]].map(([k, t]) => `<button class="chip" type="button" data-vrf="${k}" aria-pressed="${vrf === k}">${t}</button>`).join("")}</div>
       ${v.rvN ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${v.rvAvg.toFixed(1)}</b><div>${stars(v.rvAvg)}<div class="hint">${v.rvN} verified</div></div></div><div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(dist[i] / tot * 100)}%"></b></i><span>${dist[i]}</span></div>`).join("")}</div>` : ""}
       ${rv.map(r => reviewItem(r)).join("") || `<div class="empty"><span class="ei">${I.shield}</span><b>${v.rvN ? "No reviews match that filter" : "No verified reviews yet"}</b><p>Bought from ${esc(v.name)}? A photo of your receipt keeps every review real.</p></div>`}
@@ -1543,6 +1548,13 @@ function closeSheet() {
   addEventListener("pointermove", e => { if (y0 === null) return; dy = Math.max(0, e.clientY - y0); sh().style.transform = `translateY(${dy}px)`; });
   addEventListener("pointerup", () => { if (y0 === null) return; const v = dy / Math.max(1, Date.now() - t0); sh().classList.remove("drag"); if (dy > sh().offsetHeight * .3 || v > .6) closeSheet(); else sh().style.transform = ""; y0 = null; });
 })();
+// Share a store's review link: the phone's share sheet when there is one, otherwise copy it.
+async function shareReviews(id) {
+  const v = V[id], url = reviewsUrl(id), text = `Bought from ${v ? v.name : "this store"}? Read verified buyer reviews or leave your own on PepSeekr.`;
+  if (navigator.share) { try { await navigator.share({ title: `${v ? v.name : "Store"} reviews | PepSeekr`, text, url }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+  try { await navigator.clipboard.writeText(url); toast("Link copied: " + url.replace(/^https?:\/\//, "")); }
+  catch { prompt("Copy this link", url); }
+}
 function toast(m, ms = 3200) { const t = $("#toast"); t.textContent = m; t.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ms); }
 
 /* ---------- watch & protocol helpers ---------- */
@@ -1614,7 +1626,7 @@ function route(keepScroll) {
   if (h.startsWith("p-")) buyBar();
   paintFresh();
   { const on = $(".sizes.monly [aria-checked=true]"); if (on) on.parentElement.scrollLeft = on.offsetLeft - (on.parentElement.clientWidth - on.offsetWidth) / 2; }
-  if (keepScroll && lastRoute === h) scrollTo(0, y); else if (h === "catalog") $("#catalog")?.scrollIntoView(); else if (h === "seller-log") $("#slog")?.scrollIntoView(); else scrollTo(0, 0);
+  if (keepScroll && lastRoute === h) scrollTo(0, y); else if (h.startsWith("v-") && hq.get("rv")) setTimeout(() => $("#reviews")?.scrollIntoView({ block: "start" }), 60); else if (h === "catalog") $("#catalog")?.scrollIntoView(); else if (h === "seller-log") $("#slog")?.scrollIntoView(); else scrollTo(0, 0);
   lastRoute = h;
   // The server-rendered SEO block belongs to the URL's own page; hide it once the app moves elsewhere,
   // and move the address back to "/" so a shared link doesn't pair one page's path with another's view.
@@ -1715,6 +1727,7 @@ document.addEventListener("click", async e => {
   const kd = t.closest("[data-kind]"); if (kd) { $$("[data-kind]").forEach(x => x.setAttribute("aria-checked", x === kd)); return; }
   // review flow
   const rv = t.closest("[data-review]"); if (rv) { openReview(rv.dataset.review); return; }
+  const rs = t.closest("[data-rvshare]"); if (rs) { shareReviews(rs.dataset.rvshare); return; }
   const rwv = t.closest("[data-rwv]"); if (rwv) { RW.vendor = rwv.dataset.rwv; RW.step = 1; renderReview(); return; }
   const rws = t.closest("[data-rws]"); if (rws) { rwCapture(); RW.stars = +rws.dataset.rws; renderReview(); return; }
   const rwt = t.closest("[data-rwt]"); if (rwt) { rwCapture(); const tg = rwt.dataset.rwt; RW.tags = RW.tags.includes(tg) ? RW.tags.filter(x => x !== tg) : [...RW.tags, tg]; rwt.setAttribute("aria-pressed", RW.tags.includes(tg)); return; }

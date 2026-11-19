@@ -117,6 +117,10 @@
       "destination": "/api/seo?t=vendors"
     },
     {
+      "source": "/vendors/:id/reviews",
+      "destination": "/api/seo?t=v&s=:id&r=1"
+    },
+    {
       "source": "/vendors/:id",
       "destination": "/api/seo?t=v&s=:id"
     },
