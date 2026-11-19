@@ -149,16 +149,18 @@ function score() {
     // Rating: outside reputation as a prior (weight 8) blended with verified PepSeekr reviews (weight 1 each).
     // Outside signal: Finnrick's independent lab-test rating (share of acceptable tests) on a 1-5 scale.
     // Trustpilot removed the peptide stores in 2026, so it no longer counts.
-    // Stores Finnrick hasn't tested start at the middle of the tested stores, so being tested is never a penalty
-    // in itself: above-median results raise the start point, below-median results lower it.
-    const fr = v.finnrick_pct != null ? 1 + 4 * v.finnrick_pct / 100 : FR_MID;
+    // Stores with no independent tests start half a star below the middle of the tested stores: testing earns
+    // its keep, but a new store isn't buried. Above-median lab results raise the start point, below-median lower it.
+    v.tested = v.finnrick_pct != null;
+    const fr = v.tested ? 1 + 4 * v.finnrick_pct / 100 : FR_MID - 0.5;
     const prior = v.tier === "mixed" ? Math.min(fr, PRIOR.mixed) : fr;
     const st = RV.stats[v.id]; v.rvN = st ? +st.n : 0; v.rvAvg = st ? +st.avg : null;
     v.rating = v.rvN ? (prior * 8 + v.rvAvg * v.rvN) / (8 + v.rvN) : prior;
     // Reputation is scaled to what real stores achieve: a 3.0 rating (a 50% lab-test pass rate) earns 0 and a 4.6 rating
-    // (a 90% pass rate, about the best in the market) earns all 40, so an A is reachable but has to be earned.
-    const rep = Math.max(0, Math.min(40, (v.rating - 3) / 1.6 * 40));
-    const price = Math.max(0, Math.min(30, 15 + (1 - rel) * 60));
+    // (a 90% pass rate, about the best in the market) earns all 45, so an A is reachable but has to be earned.
+    // Lab results outweigh price (45 vs 25): testing costs stores money, so close calls go to the better-tested store.
+    const rep = Math.max(0, Math.min(45, (v.rating - 3) / 1.6 * 45));
+    const price = Math.max(0, Math.min(25, 12.5 + (1 - rel) * 50));
     // COA (20): the share of this vendor's product pages where we found a current certificate of analysis.
     // If we can't check a store's pages (e.g. it blocks our checker), COA is neutral: 10 of 20, neither rewarded nor penalized.
     const coa = v.coaKnown ? Math.round(20 * v.coaPct / 100) : 10;
@@ -168,7 +170,7 @@ function score() {
   });
   Object.values(V).sort((a, b) => b.score - a.score).forEach((v, i) => v.rank = i + 1);
 }
-const scoreWord = n => n >= 90 ? "Excellent" : n >= 80 ? "Good" : n >= 70 ? "Fair" : "Below par";
+const scoreWord = n => n >= 80 ? "Excellent" : n >= 65 ? "Good" : n >= 50 ? "Fair" : "Weak";
 const sizeTxt = s => (s || "").replace(/iu$/, " IU");
 const unitTxt = u => u === "iu" ? "IU" : u;
 const shipCost = (v, sub) => v.ship_flat == null ? 0 : (v.free_ship_over != null && sub >= +v.free_ship_over ? 0 : +v.ship_flat);
@@ -224,7 +226,7 @@ function vBadge(v) {
   if (!v.rvN && !v.rep_trustpilot) return `<span class="pill p-n" title="No reviews from verified buyers yet">No reviews yet</span>`;
   return "";
 }
-const ringC = s => s >= 70 ? "var(--brand)" : s >= 55 ? "var(--warn)" : "var(--sale)";
+const ringC = s => s >= 65 ? "var(--brand)" : s >= 50 ? "var(--warn)" : "var(--sale)";
 function ring(s, size = 54) {
   const r = (size - 5) / 2, c = 2 * Math.PI * r;
   return `<span class="ring" style="width:${size}px;height:${size}px;--rc:${ringC(s)}" role="img" aria-label="Score ${s} of 100"><svg viewBox="0 0 ${size} ${size}"><circle class="tr" cx="${size / 2}" cy="${size / 2}" r="${r}"/><circle class="fg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - s / 100)}"/></svg><b style="font-size:${size > 60 ? 20 : size < 46 ? 13 : 15}px">${s}</b></span>`;
@@ -402,7 +404,7 @@ function dealCard(d, glow) {
 }
 function vendorCard(v, glow) {
   return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank} · ${scoreWord(v.score)}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div>${v.tie_text ? `<span class="vtie">${I_MIC}${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieWho(v))}</span>` : ""}<span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
-    <div class="trip"><div><span class="lbl">Rating</span><b>${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : v.site_reviews > 0 && v.site_rating != null ? "★ " + (+v.site_rating).toFixed(1) : "—"}</b><span class="hint">${v.rvN ? v.rvN + " verified" : v.finnrick_pct != null ? "Finnrick lab tests" : v.site_reviews > 0 && v.site_rating != null ? v.site_reviews + " on their site" : "none yet"}</span></div><div><span class="lbl">COA on file</span><b>${coaPctTxt(v)}</b></div><div><span class="lbl">vs market</span>${(d => `<b class="${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</b>`)(Math.round((v.priceIdx - 1) * 100))}</div></div>
+    <div class="trip"><div><span class="lbl">Rating</span><b>${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : v.site_reviews > 0 && v.site_rating != null ? "★ " + (+v.site_rating).toFixed(1) : "—"}</b><span class="hint">${v.rvN ? v.rvN + " verified" : v.finnrick_pct != null ? "Finnrick lab tests" : v.site_reviews > 0 && v.site_rating != null ? v.site_reviews + " on their site" : "no lab tests yet"}</span></div><div><span class="lbl">COA on file</span><b>${coaPctTxt(v)}</b></div><div><span class="lbl">vs market</span>${(d => `<b class="${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</b>`)(Math.round((v.priceIdx - 1) * 100))}</div></div>
     <div class="vfoot"><span>${I.truck.replace("<svg", '<svg style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px"')}${esc(shipText(v))}<span class="mono" style="margin-left:8px;opacity:.8">${v.count} listings</span></span>${promoOf(v) ? dealTag(v) : v.promo_text ? promoPill(v) : ""}</div></a>`;
 }
 function pcard(p, list) {
@@ -464,7 +466,7 @@ function vHome() {
     <div class="monly">${sec("", "Categories", "Browse by category")}<div class="hs mchips"><button class="chip" type="button" data-cat="All" aria-pressed="${S.cat === "All"}">All <span>${c.All}</span></button>${TILES.map(([n, i]) => `<button class="chip" type="button" style="--h:var(--cat-${i})" data-cat="${esc(n)}" aria-pressed="${S.cat === n}">${esc(n)} <span>${c[n]}</span></button>`).join("")}</div></div>
     ${sec("02", "Best deals", "Best deals vs market average", "Same vial, same size, vendors rated 3.5★ and up", "#search")}
     ${deals.length ? `<div class="g3c">${deals.slice(0, isM() ? 4 : 6).map((d, i) => dealCard(d, i === 0)).join("")}</div>` : `<div class="card empty"><b>No standout deals right now</b><p>Loosen the filters or check back after the next price pull.</p></div>`}
-    ${sec("03", "Who to buy from", "Who to buy from", "Score = reviews 40 + price 30 + COA 20 + shipping 10", "#vendors")}
+    ${sec("03", "Who to buy from", "Who to buy from", "Score = lab results & reviews 45 + price 25 + COA 20 + shipping 10", "#vendors")}
     <div class="g3c">${vs.slice(0, 6).map((v, i) => vendorCard(v, i === 0)).join("")}</div>
     ${ctaBand()}
     ${sec("04", "Catalog", "Every peptide we track", "", "")}
@@ -567,7 +569,7 @@ function vVendor(id) {
   if (vrf === "5") rv = rv.filter(r => r.stars === 5); if (vrf === "ship") rv = rv.filter(r => (r.tags || []).some(t => /ship/i.test(t))); if (vrf === "coa") rv = rv.filter(r => (r.tags || []).includes("Matches lab report"));
   const coaRows = rows.filter(r => r.coa === true).sort((a, b) => a.pep.localeCompare(b.pep));
   const following = FOLLOW.has(id), hidden = HIDE.has(id);
-  const bk = [["Reviews", v.pts.rep, 40], ["Price", v.pts.price, 30], ["COA", v.pts.coa, 20], ["Shipping", v.pts.ship, 10]];
+  const bk = [["Lab results & reviews", v.pts.rep, 45], ["Price", v.pts.price, 25], ["COA", v.pts.coa, 20], ["Shipping", v.pts.ship, 10]];
   return `<section class="vhero"><div class="gridbg"></div><div class="wrap in">${LOGOS.has(v.id) ? `<span class="mono-tile lg"><img src="/logos/${esc(v.id)}.png" alt="${esc(v.name)} logo"></span>` : `<span class="mono-tile">${esc(v.name[0])}</span>`}<div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${cartPill(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>${tieLine(v)}
       <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
       <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Finnrick tests"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
@@ -593,10 +595,14 @@ function vVendor(id) {
 
 /* ---------- vendors list, seller log ---------- */
 function vVendors() {
-  const all = Object.values(V).sort((a, b) => b.score - a.score), nTie = all.filter(v => v.tie_text).length;
+  const vsort = store.get("pf_vsort", "score");
+  const by = { score: (a, b) => b.score - a.score, tested: (a, b) => (b.tested - a.tested) || ((b.finnrick_pct || 0) - (a.finnrick_pct || 0)) || (b.score - a.score), value: (a, b) => (a.priceIdx - b.priceIdx) || (b.score - a.score) };
+  const all = Object.values(V).sort(by[vsort] || by.score), nTie = all.filter(v => v.tie_text).length;
   const vs = S.vtie ? all.filter(v => v.tie_text) : all;
-  return `<div class="wrap vhead"><div class="sec"><div><h2>Who to buy from</h2><p class="t2" style="margin-top:4px">We keep looking for the most reliable stores and leave out the ones that don't meet our bar. Score: reputation 40, price 30, lab reports 20, shipping 10. No store can pay for rank. <a class="lnk" href="/method#scores">How we score</a></p></div></div>
+  return `<div class="wrap vhead"><div class="sec"><div><h2>Who to buy from</h2><p class="t2" style="margin-top:4px">We keep looking for the most reliable stores and leave out the ones that don't meet our bar. Score: lab results and reviews 45, price 25, lab reports on product pages 20, shipping 10. No store can pay for rank. <a class="lnk" href="/method#scores">How we score</a></p></div></div>
     <div class="row" style="gap:8px;margin-top:12px" role="radiogroup" aria-label="Show"><button class="chip" type="button" role="radio" data-vtie="" aria-checked="${!S.vtie}" aria-pressed="${!S.vtie}">All stores <span>${all.length}</span></button><button class="chip" type="button" role="radio" data-vtie="1" aria-checked="${!!S.vtie}" aria-pressed="${!!S.vtie}">${I_MIC}Creator-linked stores <span>${nTie}</span></button></div>
+    <div class="seg vsort" role="radiogroup" aria-label="Sort stores" style="margin-top:10px;max-width:460px">${[["score", "Best overall"], ["tested", "Best tested"], ["value", "Best value"]].map(([k, t]) => `<button type="button" role="radio" data-vsort="${k}" aria-checked="${vsort === k}">${t}</button>`).join("")}</div>
+    ${vsort === "tested" ? `<p class="hint" style="margin-top:8px">Stores with independent lab tests first, highest pass rate first. ${all.filter(v => !v.tested).length} stores have no published tests yet.</p>` : vsort === "value" ? `<p class="hint" style="margin-top:8px">Cheapest compared with the middle price for the same vials, counting running deals. Check lab results before you buy.</p>` : ""}
     ${S.vtie ? `<p class="hint" style="margin-top:8px">Stores owned by, or promoted by, a creator or podcaster. Each tie links to where we found it.</p>` : ""}
     <div class="g3c" style="margin-top:14px">${vs.map((v, i) => vendorCard(v, i === 0 && !S.vtie)).join("")}</div>
     <div class="g3c" style="margin-top:36px;grid-template-columns:1fr 1fr">
@@ -1666,6 +1672,7 @@ document.addEventListener("click", async e => {
   const tc = t.closest("[data-tgtclear]"); if (tc) { const k = tc.dataset.tgtclear; if (WATCH[k]) { WATCH[k].target = null; saveW(); } const i = $(`[data-tgt="${CSS.escape(k)}"]`); if (i) i.value = ""; tc.remove(); return; }
   if (t.closest("[data-settarget]")) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size, v = parseFloat($("#tgt").value); WATCH[k] = Object.assign({ drop: true, restock: true, sale: true }, WATCH[k] || {}, { on: true, target: isFinite(v) && v > 0 ? v : null }); saveW(); toast(isFinite(v) && v > 0 ? `We'll alert you when ${short(pv.dataset.pep)} ${sizeTxt(pv.dataset.size)} drops below ${money2(v)}` : "Watching for sales and drops"); route(true); return; }
   const wk = t.closest("[data-wk]"); if (wk) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size; WATCH[k] = Object.assign({ target: null, on: true, drop: true, restock: true, sale: true }, WATCH[k] || {}); WATCH[k][wk.dataset.wk] = !(WATCH[k][wk.dataset.wk] !== false); wk.setAttribute("aria-checked", WATCH[k][wk.dataset.wk]); saveW(); return; }
+  const vso = t.closest("[data-vsort]"); if (vso) { store.set("pf_vsort", vso.dataset.vsort); route(true); return; }
   const em = t.closest("[data-eml]"); if (em && EMP) { const k = em.dataset.eml; EMP[k] = !EMP[k]; em.setAttribute("aria-checked", EMP[k]); sbc().rpc("pk_email_set", { p_alerts: k === "alerts" ? EMP.alerts : null, p_digest: k === "digest" ? EMP.digest : null }).then(({ error }) => { if (error) { EMP[k] = !EMP[k]; em.setAttribute("aria-checked", EMP[k]); toast("Couldn't save that. Try again."); } else toast(EMP[k] ? "Turned on" : "Turned off"); }); return; }
   const wrm = t.closest("[data-wrm]"); if (wrm) { const k = wrm.dataset.wrm, [p, s] = k.split("|"); delete WATCH[k]; saveW(); route(true); toast(`Removed ${short(p)} ${sizeTxt(s)} from your watchlist`); return; }
   const aa = t.closest("[data-aall]"); if (aa) { store.set("pf_aall", aa.dataset.aall === "1"); route(true); return; }
