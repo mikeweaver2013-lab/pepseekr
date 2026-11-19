@@ -860,3 +860,10 @@ tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset
 .av.lg{background:#fff;overflow:hidden;padding:2px}.av.lg img{width:100%;height:100%;object-fit:contain;display:block}
 .p-deal{background:var(--sale);color:#fff;font-weight:700;letter-spacing:.02em}
 .mono-tile.lg{background:#fff;overflow:hidden;padding:10px}.mono-tile.lg img{width:100%;height:100%;object-fit:contain}
+.vhead .sec{margin-top:20px;margin-bottom:0}
+.vcard{gap:10px;padding:16px 18px}
+.vcard .trip{padding-top:10px}
+.vcard .vfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.vcard .vfoot .pill{white-space:nowrap}
+.vhead .lnk{color:var(--brand);text-decoration:underline;text-underline-offset:2px}
+@media (max-width:767px){.vcard .vfoot>span:first-child{display:none}.vcard .vfoot:not(:has(.pill)){display:none}}
