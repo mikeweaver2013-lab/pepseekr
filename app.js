@@ -155,7 +155,9 @@ function score() {
     const prior = v.tier === "mixed" ? Math.min(fr, PRIOR.mixed) : fr;
     const st = RV.stats[v.id]; v.rvN = st ? +st.n : 0; v.rvAvg = st ? +st.avg : null;
     v.rating = v.rvN ? (prior * 8 + v.rvAvg * v.rvN) / (8 + v.rvN) : prior;
-    const rep = Math.max(0, Math.min(40, (v.rating - 3) / 2 * 40));
+    // Reputation is scaled to what real stores achieve: a 3.0 rating (a 50% lab-test pass rate) earns 0 and a 4.6 rating
+    // (a 90% pass rate, about the best in the market) earns all 40, so an A is reachable but has to be earned.
+    const rep = Math.max(0, Math.min(40, (v.rating - 3) / 1.6 * 40));
     const price = Math.max(0, Math.min(30, 15 + (1 - rel) * 60));
     // COA (20): the share of this vendor's product pages where we found a current certificate of analysis.
     // If we can't check a store's pages (e.g. it blocks our checker), COA is neutral: 10 of 20, neither rewarded nor penalized.
@@ -166,6 +168,7 @@ function score() {
   });
   Object.values(V).sort((a, b) => b.score - a.score).forEach((v, i) => v.rank = i + 1);
 }
+const scoreWord = n => n >= 90 ? "Excellent" : n >= 80 ? "Good" : n >= 70 ? "Fair" : "Below par";
 const sizeTxt = s => (s || "").replace(/iu$/, " IU");
 const unitTxt = u => u === "iu" ? "IU" : u;
 const shipCost = (v, sub) => v.ship_flat == null ? 0 : (v.free_ship_over != null && sub >= +v.free_ship_over ? 0 : +v.ship_flat);
@@ -221,7 +224,7 @@ function vBadge(v) {
   if (!v.rvN && !v.rep_trustpilot) return `<span class="pill p-n" title="No reviews from verified buyers yet">No reviews yet</span>`;
   return "";
 }
-const ringC = s => s >= 60 ? "var(--brand)" : s >= 40 ? "var(--warn)" : "var(--sale)";
+const ringC = s => s >= 70 ? "var(--brand)" : s >= 55 ? "var(--warn)" : "var(--sale)";
 function ring(s, size = 54) {
   const r = (size - 5) / 2, c = 2 * Math.PI * r;
   return `<span class="ring" style="width:${size}px;height:${size}px;--rc:${ringC(s)}" role="img" aria-label="Score ${s} of 100"><svg viewBox="0 0 ${size} ${size}"><circle class="tr" cx="${size / 2}" cy="${size / 2}" r="${r}"/><circle class="fg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - s / 100)}"/></svg><b style="font-size:${size > 60 ? 20 : size < 46 ? 13 : 15}px">${s}</b></span>`;
@@ -398,7 +401,7 @@ function dealCard(d, glow) {
   return `<a class="card deal ${glow ? "glow" : ""}" href="#p-${slugOf(d.p)}"><span class="vw">${vial(d.p, d.s, 82)}</span><span class="bd"><span class="row" style="justify-content:space-between"><span class="lbl">vs market average</span>${coaTag(d.b)}</span><div style="font-weight:600;margin-top:6px">${esc(short(d.p))} · ${esc(sizeTxt(d.s))}</div><div class="px">${money2(dealUnit(d.b))}<s>${money2(d.b.med)}</s></div>${promoOf(V[d.b.v]) ? `<div style="margin-top:4px">${dealTag(V[d.b.v])}</div>` : ""}<div class="ft"><span class="t2">${esc(V[d.b.v].name)}</span><span class="pct">−${d.pct}%</span></div></span></a>`;
 }
 function vendorCard(v, glow) {
-  return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div>${v.tie_text ? `<span class="vtie">${I_MIC}${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieWho(v))}</span>` : ""}<span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
+  return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank} · ${scoreWord(v.score)}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div>${v.tie_text ? `<span class="vtie">${I_MIC}${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieWho(v))}</span>` : ""}<span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
     <div class="trip"><div><span class="lbl">Rating</span><b>${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : v.site_reviews > 0 && v.site_rating != null ? "★ " + (+v.site_rating).toFixed(1) : "—"}</b><span class="hint">${v.rvN ? v.rvN + " verified" : v.finnrick_pct != null ? "Finnrick lab tests" : v.site_reviews > 0 && v.site_rating != null ? v.site_reviews + " on their site" : "none yet"}</span></div><div><span class="lbl">COA on file</span><b>${coaPctTxt(v)}</b></div><div><span class="lbl">vs market</span>${(d => `<b class="${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</b>`)(Math.round((v.priceIdx - 1) * 100))}</div></div>
     <div class="vfoot"><span>${I.truck.replace("<svg", '<svg style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px"')}${esc(shipText(v))}<span class="mono" style="margin-left:8px;opacity:.8">${v.count} listings</span></span>${promoOf(v) ? dealTag(v) : v.promo_text ? promoPill(v) : ""}</div></a>`;
 }
@@ -568,7 +571,7 @@ function vVendor(id) {
   return `<section class="vhero"><div class="gridbg"></div><div class="wrap in">${LOGOS.has(v.id) ? `<span class="mono-tile lg"><img src="/logos/${esc(v.id)}.png" alt="${esc(v.name)} logo"></span>` : `<span class="mono-tile">${esc(v.name[0])}</span>`}<div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${cartPill(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>${tieLine(v)}
       <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
       <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Finnrick tests"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
-    <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
+    <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length} · ${scoreWord(v.score)}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
   <div class="wrap"><div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
     ${v.promo_text ? `<div class="promo" style="margin:0"><b>${esc(v.promo_text)}</b><div class="hint" style="margin-top:2px">${esc(v.promo_detail || "")}${v.promo_ends ? " Ends " + new Date(v.promo_ends).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "." : ""}${promoOf(v) ? (promoOf(v).type === "bxgy" ? ` Prices below are the store's list price; $/mg, rankings and cart totals count the free vials (${promoOf(v).buy} paid + ${promoOf(v).get} free).` : " $/mg, rankings and cart totals include the discount.") : " Prices on PepSeekr are before this discount."}</div></div>` : ""}
     ${affNote(v)}<div class="card"><div class="phd"><div><span class="lbl">Listings</span><h3 style="font-size:17px;margin-top:4px">Best prices at ${esc(v.name)}</h3></div><span class="mono t3" style="font-size:12px">sorted by vs average</span></div>
