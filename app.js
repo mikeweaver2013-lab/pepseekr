@@ -164,7 +164,9 @@ function score() {
     // COA (20): the share of this vendor's product pages where we found a current certificate of analysis.
     // If we can't check a store's pages (e.g. it blocks our checker), COA is neutral: 10 of 20, neither rewarded nor penalized.
     const coa = v.coaKnown ? Math.round(20 * v.coaPct / 100) : 10;
-    let ship = 5; if (v.free_ship_over != null) ship = v.free_ship_over <= 150 ? 10 : v.free_ship_over <= 250 ? 8 : 6;
+    // Shipping (10): a published free-shipping threshold earns the most; a known flat rate with no free shipping earns 5;
+    // a store whose rates only appear at checkout sits in between at 7, since unknown isn't the same as worst.
+    let ship = v.free_ship_over != null ? (v.free_ship_over <= 150 ? 10 : v.free_ship_over <= 250 ? 8 : 6) : v.ship_flat != null ? 5 : 7;
     v.pts = { rep: Math.round(rep), price: Math.round(price), coa, ship };
     v.score = Math.round(rep + price + coa + ship);
   });
