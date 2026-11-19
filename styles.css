@@ -867,3 +867,13 @@ tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset
 .vcard .vfoot .pill{white-space:nowrap}
 .vhead .lnk{color:var(--brand);text-decoration:underline;text-underline-offset:2px}
 @media (max-width:767px){.vcard .vfoot>span:first-child{display:none}.vcard .vfoot:not(:has(.pill)){display:none}}
+.lnk{color:var(--brand);text-decoration:underline;text-underline-offset:2px;font:inherit;background:none;border:0;padding:0;cursor:pointer}
+@media (min-width:768px){.wr.donly{display:grid}}
+.wr{grid-template-columns:1fr 150px 120px 90px 44px}
+.wpx{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.wpx .p-deal{font-size:10.5px;padding:2px 6px;white-space:nowrap}
+.wrm{width:44px;height:44px;display:grid;place-items:center;border-radius:10px;color:var(--text-3)}
+.wrm:hover{color:var(--warn,#b3261e);background:var(--surface-3)}
+.wrm:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+@media (max-width:1100px) and (min-width:768px){.wr{grid-template-columns:1fr 150px 110px 44px}}
+@media (max-width:767px){.wr{grid-template-columns:1fr auto 44px}.wr>button.wrm{grid-row:1/span 2;grid-column:3}}

@@ -92,8 +92,8 @@ let WATCH = store.get("pf_watch", null);           // { "pep|size": {target, on,
 let PROT = store.get("pf_proto2", null);           // [{pep,size,qty}]
 let FOLLOW = new Set(store.get("pf_follow", []));  // vendor ids for sale alerts
 const seenAlerts = () => store.get("pf_seen_alerts", 0);
-const saveW = () => { store.set("pf_watch", WATCH); syncPush(); prefsDirty(); };
-const saveP = () => { store.set("pf_proto2", PROT); syncPush(); prefsDirty(); };
+const saveW = () => { store.set("pf_prefs_at", Date.now()); store.set("pf_watch", WATCH); syncPush(); prefsDirty(); };
+const saveP = () => { store.set("pf_prefs_at", Date.now()); store.set("pf_proto2", PROT); syncPush(); prefsDirty(); };
 
 function ingest(d) {
   D = d; V = {};
@@ -120,7 +120,9 @@ function ingest(d) {
   PEPS = [...new Set(ROWS.map(r => r.pep))].sort();
   score(); migrate();
 }
+const purgeW = () => { if (WATCH) Object.keys(WATCH).forEach(k => { if (!WATCH[k] || !WATCH[k].on) delete WATCH[k]; }); };
 function migrate() {
+  purgeW(); if (WATCH) store.set("pf_watch", WATCH);
   if (WATCH && PROT) return;
   const old = store.get("pf_protocol", store.get("vs_protocol", []));
   if (!PROT) { PROT = old.map(p => { const b = bestOf(ROWS.filter(r => r.pep === p)); return b ? { pep: p, size: b.size, qty: 1 } : null; }).filter(Boolean); store.set("pf_proto2", PROT); }
@@ -321,7 +323,7 @@ const newest = () => Object.values(V).map(v => Date.parse(v.last_scraped_at) || 
 const pulled = () => newest() ? "pulled " + ago(new Date(newest()).toISOString()) : "loading";
 const curTab = () => { let h = (HASH() || "#home").slice(1); if (h === "list") h = "protocol"; return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
 function unread() { const since = seenAlerts(); return ALERTS.filter(a => Date.parse(a.at) > since && relevant(a)).length; }
-const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || PROT.some(i => ROWS.some(r => r.v === a.v && r.pep === i.pep)) : (watchingPep(a.pep) || inProt(a.pep)) && dropOk(a);
+const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || Object.keys(WATCH).some(k => WATCH[k].on && ROWS.some(r => r.v === a.v && r.pep + "|" + r.size === k)) : !!WATCH[a.pep + "|" + a.size]?.on && dropOk(a);
 const themeSel = () => document.documentElement.dataset.theme || "system";
 function chrome() {
   const tab = curTab(), n = unread(), cnt = `<span class="cnt" ${n ? "" : "hidden"}>${n > 9 ? "9+" : n}</span>`;
@@ -827,8 +829,8 @@ let afilt = "all", aseg = "alerts", openedAt = 0;
 function vAlerts(seg) {
   aseg = seg || aseg; const since = openedAt;
   const kinds = { all: () => true, drop: a => a.kind === "drop", restock: a => a.kind === "restock", sale: a => a.kind === "sale" || a.kind === "promo" };
-  const list = ALERTS.filter(a => !HIDE.has(a.v)).filter(kinds[afilt]);
-  const mine = list.filter(relevant), feed = mine.length ? mine : list;
+  const seenA = new Set(), list = ALERTS.filter(a => !HIDE.has(a.v)).filter(kinds[afilt]).filter(a => { const k = [a.v, a.pep, a.size, a.kind, a.now].join("|"); if (seenA.has(k)) return false; seenA.add(k); return true; });
+  const aall = store.get("pf_aall", false), mine = list.filter(relevant), feed = aall ? list : mine;
   const today = feed.filter(a => Date.now() - Date.parse(a.at) < 864e5), earlier = feed.filter(a => Date.now() - Date.parse(a.at) >= 864e5).slice(0, 60);
   const nw = Object.values(WATCH).filter(w => w.on).length, un = feed.filter(a => Date.parse(a.at) > since).length;
   const segc = `<div class="seg" role="radiogroup" aria-label="View" style="margin-top:14px"><button type="button" role="radio" data-aseg="alerts" aria-checked="${aseg === "alerts"}">Alerts<small>${un} new</small></button><button type="button" role="radio" data-aseg="watchlist" aria-checked="${aseg === "watchlist"}">Watchlist<small>${nw}</small></button></div>`;
@@ -837,22 +839,22 @@ function vAlerts(seg) {
     <div class="card panel"><h3>Notify me about</h3>${[["drop", "Price drops", "Your % per vial, 15% unless you change it"], ["restock", "Restocks", "A watched vial is back"], ["sale", "Sales", "Item and store-wide sales"]].map(([k, t, s]) => `<button type="button" class="srow" role="switch" aria-checked="${store.get("pf_n_" + k, true)}" data-npref="${k}"><span><b style="font-weight:600">${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`).join("")}
       <div class="lbl" style="margin:14px 0 8px">Deliver by</div>${pushCard(false)}</div>
     <div class="card panel monly"><h3>Appearance</h3><div class="seg" role="radiogroup" aria-label="Theme" style="margin-top:10px">${[["system", "System"], ["light", "Light"], ["dark", "Dark"]].map(([k, t]) => `<button type="button" role="radio" data-theme-set="${k}" aria-checked="${themeSel() === k}">${t}</button>`).join("")}</div></div></aside>`;
-  const body = aseg === "watchlist" ? watchlist() : `<div class="hs row" style="flex-wrap:nowrap;gap:8px">${[["all", "All · " + list.length], ["drop", "Price drops"], ["restock", "Restocks"], ["sale", "Sales"]].map(([k, t]) => `<button class="chip" type="button" data-afilt="${k}" aria-pressed="${afilt === k}">${t}</button>`).join("")}</div>
-    ${!mine.length && list.length ? `<p class="hint" style="margin-top:10px">Nothing on your watchlist changed, so here's everything. Tap ☆ on a vial to narrow this down.</p>` : ""}
-    <div class="card feed" style="margin-top:12px">${today.length ? `<div class="gh"><span class="lbl">Today</span></div>${today.map(a => alertItem(a, since)).join("")}` : ""}${earlier.length ? `<div class="gh"><span class="lbl">Earlier this week</span></div>${earlier.map(a => alertItem(a, since)).join("")}` : ""}${!today.length && !earlier.length ? `<div class="empty"><span class="ei">${I.bell}</span><b>No ${afilt === "all" ? "" : { drop: "price-drop ", restock: "restock ", sale: "sale " }[afilt]}alerts this week</b><p>We check prices every 2 hours.</p></div>` : ""}</div>`;
+  const body = aseg === "watchlist" ? watchlist() : `<div class="hs row" style="flex-wrap:nowrap;gap:8px">${[["all", "All · " + feed.length], ["drop", "Price drops"], ["restock", "Restocks"], ["sale", "Sales"]].map(([k, t]) => `<button class="chip" type="button" data-afilt="${k}" aria-pressed="${afilt === k}">${t}</button>`).join("")}</div>
+    <p class="hint" style="margin-top:10px">${aall ? `Showing alerts from every store. <button class="lnk" type="button" data-aall="0">Show only my watchlist</button>` : `Showing alerts for vials on your watchlist. <button class="lnk" type="button" data-aall="1">Show alerts from every store</button>`}</p>
+    <div class="card feed" style="margin-top:12px">${today.length ? `<div class="gh"><span class="lbl">Today</span></div>${today.map(a => alertItem(a, since)).join("")}` : ""}${earlier.length ? `<div class="gh"><span class="lbl">Earlier this week</span></div>${earlier.map(a => alertItem(a, since)).join("")}` : ""}${!today.length && !earlier.length ? `<div class="empty"><span class="ei">${I.bell}</span><b>${!aall && !nw ? "You're not watching anything yet" : `No ${afilt === "all" ? "" : { drop: "price-drop ", restock: "restock ", sale: "sale " }[afilt]}alerts this week`}</b><p>${!aall && !nw ? "Tap ☆ on a vial to get alerts when its price drops or it comes back in stock." : "We check prices every 2 hours."}</p></div>` : ""}</div>`;
   return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><h1 class="h1">${aseg === "watchlist" ? "Watchlist" : "Alerts"}</h1></div>${aseg === "alerts" ? `<button class="link" type="button" data-markread style="min-height:44px">Mark all read</button>` : `<button class="link" type="button" data-additem="watch" style="min-height:44px">+ Watch a peptide</button>`}</div>${segc}
     <div class="dgrid"><div style="min-width:0">${body}</div>${rail}</div></div>`;
 }
 function watchlist() {
-  const ks = Object.keys(WATCH);
+  const ks = Object.keys(WATCH).filter(k => WATCH[k].on);
   if (!ks.length) return `<div class="card empty"><span class="ei">${I.star}</span><b>Nothing on your watchlist yet</b><p>Tap ☆ on any vial to track its price.</p><a class="btn" href="#search">Browse the catalog</a></div>`;
-  return `<div class="card wl"><div class="wr donly" style="padding-top:10px;padding-bottom:10px"><span class="lbl">Peptide</span><span class="lbl">Best now</span><span class="lbl tgc">Alert at</span><span class="lbl spk">30 days</span><span></span></div>${ks.map(k => {
+  return `<div class="card wl"><div class="wr donly" style="padding-top:10px;padding-bottom:10px"><span class="lbl">Peptide</span><span class="lbl">Best now</span><span class="lbl tgc">Alert at</span><span class="lbl spk">30 days</span><span class="sr">Remove</span></div>${ks.map(k => {
     const [p, s] = k.split("|"), w = WATCH[k], b = bestPrice(live().filter(r => r.pep === p && r.size === s)), hit = w.target && b && b.price <= w.target;
     return `<div class="wr"><a href="${pHref(p, s)}" class="row" style="gap:10px;flex-wrap:nowrap;min-width:0"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(p, s, 42)}</span><span style="min-width:0"><b style="font-weight:600">${esc(short(p))}</b> <span class="mono t3">${esc(sizeTxt(s))}</span><span class="hint" style="display:block">${b ? esc(V[b.v].name) : "Out of stock"}</span></span></a>
-      <span class="mono"><b>${b ? money2(dealUnit(b)) : "—"}</b>${b && promoOf(V[b.v]) ? " " + dealTag(V[b.v]) : ""}${hit ? ` <span class="pill p-brand">Hit</span>` : ""}</span>
+      <span class="mono wpx"><b>${b ? money2(dealUnit(b)) : "—"}</b>${hit ? ` <span class="pill p-brand">Hit</span>` : ""}${b && promoOf(V[b.v]) ? dealTag(V[b.v]) : ""}</span>
       <button type="button" class="chip sm pctchip tgc" data-pctopen="${esc(k)}" aria-label="Drop alert for ${esc(p)} ${esc(s)}: ${wPct(k)}%${w.target ? " or " + money2(w.target) : ""}. Change">↓${wPct(k)}%${w.target ? ` · ${money2(w.target)}` : ""}</button>
       <span class="spk" data-spark="${esc(k)}"></span>
-      <button type="button" role="switch" aria-checked="${w.on}" data-won="${esc(k)}" aria-label="Alerts for ${esc(p)} ${esc(s)}" style="min-height:44px;display:grid;place-items:center"><span class="tog"><i></i></span></button></div>`; }).join("")}</div>`;
+      <button type="button" class="wrm" data-wrm="${esc(k)}" aria-label="Remove ${esc(short(p))} ${esc(sizeTxt(s))} from watchlist" title="Remove from watchlist"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`; }).join("")}</div>`;
 }
 async function sparks() {
   for (const el of $$("[data-spark]")) {
@@ -1147,7 +1149,7 @@ async function pushOn() {
 async function syncSub(sub) {
   sub = sub || await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (!sub) return;
   const k = sub.toJSON().keys || { p256dh: ab64(sub.getKey("p256dh")), auth: ab64(sub.getKey("auth")) };
-  await rpc("pf_subscribe", { p_endpoint: sub.endpoint, p_p256dh: k.p256dh, p_auth: k.auth, p_protocol: [...new Set([...PROT.map(i => i.pep), ...Object.keys(WATCH).filter(k => WATCH[k].on).map(k => k.split("|")[0])])] });
+  await rpc("pf_subscribe", { p_endpoint: sub.endpoint, p_p256dh: k.p256dh, p_auth: k.auth, p_protocol: [...new Set([...Object.keys(WATCH).filter(k => WATCH[k].on).map(k => k.split("|")[0])])] });
 }
 async function pushOff() {
   try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) { await rpc("pf_unsubscribe", { p_endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
@@ -1176,7 +1178,7 @@ let prefsT = 0, prefsLoaded = false;
 function prefsDirty() { if (!SESS || !prefsLoaded) return; clearTimeout(prefsT); prefsT = setTimeout(pushPrefs, 1200); }
 async function pushPrefs() {
   if (!SESS) return;
-  const data = { list: PROT, watch: WATCH, filters: store.get("pf_filters", {}), at: Date.now() };
+  const data = { list: PROT, watch: WATCH, filters: store.get("pf_filters", {}), at: store.get("pf_prefs_at", 0) || Date.now() };
   try { await sbc().from("pk_prefs").upsert({ user_id: SESS.user.id, data }, { onConflict: "user_id" }); } catch {}
 }
 async function pullPrefs() {
@@ -1184,12 +1186,11 @@ async function pullPrefs() {
   try {
     const { data } = await sbc().from("pk_prefs").select("data").eq("user_id", SESS.user.id).maybeSingle();
     const R = data && data.data;
-    if (R) {
-      // merge: keep everything from both sides; this device wins on conflicts
-      const byK = new Map((R.list || []).map(i => [i.pep + "|" + i.size, i]));
-      PROT.forEach(i => byK.set(i.pep + "|" + i.size, Object.assign({}, byK.get(i.pep + "|" + i.size) || {}, i)));
-      PROT.splice(0, PROT.length, ...byK.values());
-      Object.keys(R.watch || {}).forEach(k => { if (!WATCH[k]) WATCH[k] = R.watch[k]; });
+    if (R && (R.at || 0) > store.get("pf_prefs_at", 0)) {
+      // the newer save wins whole, so removals carry across devices
+      PROT.splice(0, PROT.length, ...(R.list || []));
+      Object.keys(WATCH).forEach(k => delete WATCH[k]); Object.assign(WATCH, R.watch || {}); purgeW();
+      store.set("pf_prefs_at", R.at);
       if (R.filters && !store.get("pf_filters", null)) { store.set("pf_filters", R.filters); Object.assign(S, R.filters); }
       store.set("pf_proto2", PROT); store.set("pf_watch", WATCH);
     }
@@ -1500,7 +1501,7 @@ function toast(m, ms = 3200) { const t = $("#toast"); t.textContent = m; t.style
 /* ---------- watch & protocol helpers ---------- */
 function toggleWatch(p, s) {
   const k = p + "|" + s, w = WATCH[k];
-  if (w?.on) { w.on = false; toast(`Stopped watching ${short(p)} ${sizeTxt(s)}`); }
+  if (w?.on) { delete WATCH[k]; toast(`Stopped watching ${short(p)} ${sizeTxt(s)}`); }
   else if (!watchAllowed()) { upgradeSheet("watch"); return; }
   else { WATCH[k] = Object.assign({ target: null, drop: true, restock: true, sale: true }, w || {}, { on: true }); toast(`Watching ${short(p)} ${sizeTxt(s)}. We'll alert you on sales and drops.`); }
   saveW(); route(true);
@@ -1628,7 +1629,8 @@ document.addEventListener("click", async e => {
   const tc = t.closest("[data-tgtclear]"); if (tc) { const k = tc.dataset.tgtclear; if (WATCH[k]) { WATCH[k].target = null; saveW(); } const i = $(`[data-tgt="${CSS.escape(k)}"]`); if (i) i.value = ""; tc.remove(); return; }
   if (t.closest("[data-settarget]")) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size, v = parseFloat($("#tgt").value); WATCH[k] = Object.assign({ drop: true, restock: true, sale: true }, WATCH[k] || {}, { on: true, target: isFinite(v) && v > 0 ? v : null }); saveW(); toast(isFinite(v) && v > 0 ? `We'll alert you when ${short(pv.dataset.pep)} ${sizeTxt(pv.dataset.size)} drops below ${money2(v)}` : "Watching for sales and drops"); route(true); return; }
   const wk = t.closest("[data-wk]"); if (wk) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size; WATCH[k] = Object.assign({ target: null, on: true, drop: true, restock: true, sale: true }, WATCH[k] || {}); WATCH[k][wk.dataset.wk] = !(WATCH[k][wk.dataset.wk] !== false); wk.setAttribute("aria-checked", WATCH[k][wk.dataset.wk]); saveW(); return; }
-  const wo = t.closest("[data-won]"); if (wo) { const w = WATCH[wo.dataset.won]; w.on = !w.on; wo.setAttribute("aria-checked", w.on); saveW(); return; }
+  const wrm = t.closest("[data-wrm]"); if (wrm) { const k = wrm.dataset.wrm, [p, s] = k.split("|"); delete WATCH[k]; saveW(); route(true); toast(`Removed ${short(p)} ${sizeTxt(s)} from your watchlist`); return; }
+  const aa = t.closest("[data-aall]"); if (aa) { store.set("pf_aall", aa.dataset.aall === "1"); route(true); return; }
   const np = t.closest("[data-npref]"); if (np) { const k = "pf_n_" + np.dataset.npref, v = !store.get(k, true); store.set(k, v); np.setAttribute("aria-checked", v); return; }
   if (t.closest("[data-markread]")) { store.set("pf_seen_alerts", Date.now()); openedAt = Date.now(); closeDD(); route(true); return; }
   const af = t.closest("[data-afilt]"); if (af) { afilt = af.dataset.afilt; route(true); return; }
