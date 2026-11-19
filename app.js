@@ -1653,7 +1653,24 @@ async function shareReviews(id) {
   try { await navigator.clipboard.writeText(url); toast("Link copied: " + url.replace(/^https?:\/\//, "")); }
   catch { prompt("Copy this link", url); }
 }
-function toast(m, ms = 3200) { const t = $("#toast"); t.textContent = m; t.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ms); }
+// One branded notification for the whole app: top-center, navy in both themes, an icon for the kind of message.
+// kind: "ok" | "warn" | "info"; left out, it's read from the wording.
+const T_ICON = {
+  ok: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>`,
+  warn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5"/><path d="M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`
+};
+const toastKind = m => /couldn't|can't|cannot|error|failed|not |no changes|limit|up to \d|unselect|try again|expired|already/i.test(m) ? "warn" : /added|watching|saved|copied|removed|following|on |sent|done|ready|unlocked|welcome|✓/i.test(m) ? "ok" : "info";
+function hideToast() { const t = $("#toast"); if (!t) return; t.classList.remove("show"); clearTimeout(toast.t); }
+function toast(m, ms = 3200, kind) {
+  const t = $("#toast"); if (!t) return; const k = kind || toastKind(m);
+  t.className = "tst-" + k;
+  t.innerHTML = `<span class="tic">${T_ICON[k]}</span><span class="tmsg"></span><button class="tx" type="button" aria-label="Dismiss">${I.x}</button>`;
+  t.querySelector(".tmsg").textContent = m;
+  t.querySelector(".tx").onclick = hideToast;
+  requestAnimationFrame(() => t.classList.add("show"));
+  clearTimeout(toast.t); toast.t = setTimeout(hideToast, Math.max(ms, 2600));
+}
 
 /* ---------- watch & protocol helpers ---------- */
 function toggleWatch(p, s) {
@@ -1662,7 +1679,7 @@ function toggleWatch(p, s) {
   else if (!watchAllowed()) { upgradeSheet("watch"); return; }
   else { WATCH[k] = Object.assign({ target: null, drop: true, restock: true, sale: true }, w || {}, { on: true }); toast(`Watching ${short(p)} ${sizeTxt(s)}. We'll alert you on sales and drops.`); }
   saveW(); route(true);
-  if (WATCH[k]?.on && !store.get("pf_push_nudged", false) && ["off", "needs-install"].includes(pushState())) { store.set("pf_push_nudged", true); setTimeout(() => { $("#toast").style.display = "none"; } , 590); setTimeout(() => openSheet(`<div class="shd"><h2>Get told when it drops</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>${pushCard(false)}<p class="hint" style="margin-top:12px">${SESS ? "Email alerts are on your account page." : "Or sign in to get a weekly email with the best price on each vial you watch."}</p>`, "Alerts"), 600); }
+  if (WATCH[k]?.on && !store.get("pf_push_nudged", false) && ["off", "needs-install"].includes(pushState())) { store.set("pf_push_nudged", true); setTimeout(hideToast, 590); setTimeout(() => openSheet(`<div class="shd"><h2>Get told when it drops</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>${pushCard(false)}<p class="hint" style="margin-top:12px">${SESS ? "Email alerts are on your account page." : "Or sign in to get a weekly email with the best price on each vial you watch."}</p>`, "Alerts"), 600); }
 }
 let syncT = 0;
 function syncPush() { if (pushState() !== "on") return; clearTimeout(syncT); syncT = setTimeout(() => syncSub().catch(() => {}), 800); }

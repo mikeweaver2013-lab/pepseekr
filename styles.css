@@ -472,7 +472,19 @@ dl.pol dt{color:var(--text-3)}
 .slist .li{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--border)}
 
 /* toast */
-#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:80;background:var(--text);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:600;box-shadow:var(--shadow-pop);display:none;max-width:calc(100vw - 32px)}
+/* notification: top-center, navy in both themes */
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 84px);z-index:90;display:flex;align-items:center;gap:12px;width:max-content;max-width:min(460px,calc(100vw - 24px));padding:10px 8px 10px 12px;border-radius:14px;background:#0E1A33;color:#F3F6FC;border:1px solid rgba(90,140,255,.32);box-shadow:0 18px 44px rgba(4,12,32,.34),0 2px 6px rgba(4,12,32,.2);font:600 14.5px/1.35 var(--font-sans);opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,-12px) scale(.98);transition:opacity .2s ease,transform .24s cubic-bezier(.2,.8,.2,1),visibility .24s}
+#toast.show{opacity:1;visibility:visible;pointer-events:auto;transform:translate(-50%,0) scale(1)}
+#toast .tic{flex:none;width:26px;height:26px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#1F55D8;color:#FFFFFF}
+#toast .tic svg{width:15px;height:15px}
+#toast.tst-ok .tic{background:#0D9488}
+#toast.tst-warn .tic{background:#B7791F}
+#toast .tmsg{flex:1;min-width:0}
+#toast .tx{flex:none;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:#A3B1C8;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+#toast .tx:hover{background:rgba(255,255,255,.08);color:#FFFFFF}
+#toast .tx svg{width:16px;height:16px}
+#toast .tx:focus-visible{outline:2px solid #5A8CFF;outline-offset:1px}
+@media (prefers-reduced-motion:reduce){#toast{transition:opacity .15s;transform:translate(-50%,0)}}
 
 /* ---------- mobile only pieces ---------- */
 .mtop,.tabbar,.mbuy,.monly{display:none}
@@ -609,7 +621,7 @@ dl.pol dt{color:var(--text-3)}
   .sfoot{bottom:calc(-12px - env(safe-area-inset-bottom));padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   .tog.m{width:51px;height:31px}.tog.m i{width:25px;height:25px;left:2px;top:2px}
   [aria-checked="true"]>.tog.m i{transform:translateX(20px)}
-  #toast{bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px)}
+  #toast{top:calc(env(safe-area-inset-top) + 64px)}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
