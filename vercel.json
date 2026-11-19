@@ -43,6 +43,15 @@
           "value": "no-cache"
         }
       ]
+    },
+    {
+      "source": "/(account|stats|list|protocol|alerts|watchlist|seller-log)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
     }
   ],
   "redirects": [
@@ -118,6 +127,42 @@
     {
       "source": "/sitemap.xml",
       "destination": "/api/sitemap"
+    },
+    {
+      "source": "/search",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/list",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/protocol",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/alerts",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/watchlist",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/coa",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/account",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/stats",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/seller-log",
+      "destination": "/shell.html"
     }
   ]
 }

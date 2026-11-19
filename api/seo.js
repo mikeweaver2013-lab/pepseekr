@@ -130,7 +130,7 @@ function build(t, s, C) {
     return t === "home"
       ? { path: "/", route: "home", title: "PepSeekr: compare research peptide prices across every store", desc: `Compare ${PEPS.length} research peptides across ${nV} stores: price per mg, lab reports, stock and shipping. BPC-157, retatrutide, tirzepatide, GHK-Cu and more, checked every 2 hours.`, body,
           ld: [{ "@context": "https://schema.org", "@type": "WebSite", name: "PepSeekr", url: SITE + "/" }, { "@context": "https://schema.org", "@type": "Organization", name: "PepSeekr", url: SITE, logo: SITE + "/icon-512.png" }] }
-      : { path: "/peptides", route: "home", title: `All ${PEPS.length} research peptides: prices compared | PepSeekr`, desc: `Every research peptide PepSeekr tracks, with the lowest in-stock price for each across ${nV} stores.`, body, ld: [crumbs([["PepSeekr", "/"], ["Peptides", "/peptides"]])] };
+      : { path: "/peptides", route: "search", title: `All ${PEPS.length} research peptides: prices compared | PepSeekr`, desc: `Every research peptide PepSeekr tracks, with the lowest in-stock price for each across ${nV} stores.`, body, ld: [crumbs([["PepSeekr", "/"], ["Peptides", "/peptides"]])] };
   }
 
   if (t === "p") {

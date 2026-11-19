@@ -227,8 +227,43 @@ const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.
 const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
 const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
 const inProt = p => PROT.some(i => i.pep === p);
+/* ---------- clean URLs ----------
+   The app still thinks in "#route" strings (p-bpc-157, v-core, alerts...). HASH() derives that string from the real
+   path, toPath() turns one back into a path, and go() navigates with history.pushState (no page reload). */
+const APP_ROUTES = /^#(home|search|vendors|sellers|list|protocol|alerts|watchlist|coa|account|stats|sales|seller-log|doc|p-[\w%-]+|v-[\w%-]+|s-[\w%-]+)(\?.*)?$/;
+function HASH() {
+  const p = location.pathname.replace(/\/+$/, "") || "/", q = location.search, seo = document.getElementById("seo")?.dataset.route;
+  let m, r;
+  if (p === "/") r = "home";
+  else if ((m = p.match(/^\/peptides\/([^/]+)$/))) r = "p-" + m[1];
+  else if ((m = p.match(/^\/vendors\/([^/]+)$/))) r = "v-" + m[1];
+  else if (p === "/peptides") r = "search";
+  else if (p === "/influencers") r = "vendors";
+  else if (p.startsWith("/influencers/")) r = seo && seo.startsWith("v-") ? seo : "vendors";
+  else if (/^\/(method|about|terms|privacy|contact)$/.test(p)) r = "doc";
+  else r = p.slice(1);
+  return r === "home" ? "#home" : "#" + r + q;
+}
+function toPath(h) {
+  if (!h || h === "#" || h === "#home") return "/";
+  if (h.startsWith("/")) return h;
+  const [r, q] = h.replace(/^#/, "").split("?"), qs = q ? "?" + q : "";
+  if (r === "home") return "/" + qs;
+  if (r.startsWith("p-")) return "/peptides/" + r.slice(2) + qs;
+  if (r.startsWith("v-") || r.startsWith("s-")) return "/vendors/" + r.slice(2) + qs;
+  if (r === "protocol") return "/list" + qs;
+  if (r === "sellers") return "/vendors" + qs;
+  return "/" + r + qs;
+}
+let NAVS = 0;   // in-app navigations this visit; the back arrow goes home when there are none
+function go(h, replace) {
+  const path = toPath(h); if (!replace) NAVS++;
+  if (path !== location.pathname + location.search) history[replace ? "replaceState" : "pushState"](null, "", path);
+  if (typeof closeSheet === "function") closeSheet();
+  route();
+}
 // link to a product page opened on one size, with one store's offer highlighted: #p-slug?s=15mg&v=puratek
-const pHref = (pep, size, vid) => "#p-" + slugOf(pep) + (size || vid ? "?" + [size && "s=" + encodeURIComponent(size), vid && "v=" + encodeURIComponent(vid)].filter(Boolean).join("&") : "");
+const pHref = (pep, size, vid) => "/peptides/" + slugOf(pep) + (size || vid ? "?" + [size && "s=" + encodeURIComponent(size), vid && "v=" + encodeURIComponent(vid)].filter(Boolean).join("&") : "");
 let FOCUS_V = null;
 // per-vial drop threshold for in-app alerts (default 15%); a dollar target, if set, also counts
 const DEF_PCT = 15;
@@ -268,13 +303,13 @@ function barcode(seed) {
 /* ---------- chrome: band, nav, mobile bars, footer ---------- */
 const newest = () => Object.values(V).map(v => Date.parse(v.last_scraped_at) || 0).reduce((a, b) => Math.max(a, b), 0);
 const pulled = () => newest() ? "pulled " + ago(new Date(newest()).toISOString()) : "loading";
-const curTab = () => { let h = (location.hash || "#home").slice(1); if (h === "list") h = "protocol"; return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
+const curTab = () => { let h = (HASH() || "#home").slice(1); if (h === "list") h = "protocol"; return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
 function unread() { const since = seenAlerts(); return ALERTS.filter(a => Date.parse(a.at) > since && relevant(a)).length; }
 const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || PROT.some(i => ROWS.some(r => r.v === a.v && r.pep === i.pep)) : (watchingPep(a.pep) || inProt(a.pep)) && dropOk(a);
 const themeSel = () => document.documentElement.dataset.theme || "system";
 function chrome() {
   const tab = curTab(), n = unread(), cnt = `<span class="cnt" ${n ? "" : "hidden"}>${n > 9 ? "9+" : n}</span>`;
-  const home = (location.hash || "#home") === "#home" || location.hash === "";
+  const home = (HASH() || "#home") === "#home" || HASH() === "";
   $("#band").innerHTML = home ? `<div class="band"><div class="wrap"><a href="#list"><span class="new">NEW</span>My list: check off what you need and get the cheapest cart →</a><span class="r">${vendors().length} vendors · ${live().length} live listings</span></div></div>` : "";
   const nl = (h, t, k) => `<a href="#${h}" ${tab === k ? 'aria-current="page"' : ""}>${t}</a>`;
   const res = document.documentElement.dataset.resolved;
@@ -285,7 +320,7 @@ function chrome() {
     <a class="btn" href="#watchlist">${I.star} Watchlist <span class="mono t3">${Object.values(WATCH).filter(w => w.on).length}</span></a>
     <div class="bellwrap"><button class="ib" type="button" id="bell" aria-haspopup="true" aria-expanded="false" aria-label="${n} unread alerts">${I.bell}${cnt}</button><div class="dd" id="dd"></div></div>
     ${acctBtn("btn")}<button class="btn p" type="button" data-review="">Write a review</button></div></div>`;
-  const h = (location.hash || "#home").slice(1), pushed = h.startsWith("p-") || h.startsWith("v-") || h.startsWith("s-");
+  const h = (HASH() || "#home").slice(1), pushed = h.startsWith("p-") || h.startsWith("v-") || h.startsWith("s-");
   const ttl = h.startsWith("p-") ? short(PEPS.find(p => slugOf(p) === h.slice(2)) || "") : pushed ? (V[h.slice(2)]?.name || "") : "";
   $("#mtop").innerHTML = `<div class="in">${pushed ? `<button class="mib back" type="button" data-back aria-label="Back">${I.back}</button><span class="ttl">${esc(ttl)}</span>` : `<a href="#home" aria-label="PepSeekr home">${wordmark()}</a><span class="sp"></span>`}
     <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a>${acctBtn("mib")}</div>`;
@@ -1045,7 +1080,7 @@ async function watchStore(id, name) {
     await new Promise(r => setTimeout(r, 10000));
     let st; try { st = (await rpc("vs_store_status", { p_key: key })).find(s => s.id === id); } catch { continue; }
     if (st && st.at && st.at !== before) {
-      await load(); if (location.hash === "#vendors") renderOwner();
+      await load(); if (HASH() === "#vendors") renderOwner();
       toast(/^ok/.test(st.status || "") ? `${name}: ${st.count} listings added` : `${name}: ${why(st)}`, 6000); return;
     }
   }
@@ -1141,9 +1176,9 @@ async function authInit() {
   if (!window.supabase) await new Promise(r => { const el = document.getElementById("sbjs"); if (!el) return r(); el.addEventListener("load", r, { once: true }); el.addEventListener("error", r, { once: true }); setTimeout(r, 15000); });
   const c = sbc(); if (!c) return;
   // the "Sign in on this device" button in our email: #account?th=<token hash>
-  const th = (location.hash.match(/[?&]th=([^&]+)/) || [])[1];
-  if (th) { history.replaceState(null, "", "#account"); route(true); const { error } = await c.auth.verifyOtp({ token_hash: decodeURIComponent(th), type: "magiclink" }); if (error) toast("That sign-in link expired. Enter your email to get a new code.", 6000); }
-  else if (location.hash === "#account") route(true);
+  const th = (HASH().match(/[?&]th=([^&]+)/) || [])[1];
+  if (th) { history.replaceState(null, "", "/account"); route(true); const { error } = await c.auth.verifyOtp({ token_hash: decodeURIComponent(th), type: "magiclink" }); if (error) toast("That sign-in link expired. Enter your email to get a new code.", 6000); }
+  else if (HASH() === "#account") route(true);
   try { const { data } = await c.auth.getSession(); SESS = data.session; } catch {}
   if (SESS) { await refreshMe(); await pullPrefs(); route(true); }
   else if (ME) { ME = null; store.set("pk_me", null); route(true); }
@@ -1153,8 +1188,8 @@ async function authInit() {
     if (!s && was) { ME = null; store.set("pk_me", null); prefsLoaded = false; route(true); }
   });
   // back from Stripe checkout: the webhook can take a few seconds
-  if (/upgraded=1/.test(location.hash)) {
-    history.replaceState(null, "", "#account");
+  if (/upgraded=1/.test(HASH())) {
+    history.replaceState(null, "", "/account");
     for (let i = 0; i < 8 && !(ME && ME.pro); i++) { await new Promise(r => setTimeout(r, 2000)); await refreshMe(); }
     toast(ME && ME.pro ? "You're on Pro. Routes, swaps and cart fills are unlocked." : "Payment received. Pro turns on in a minute; refresh if it hasn't.", 6000);
     route(true);
@@ -1312,7 +1347,8 @@ const TRK = (() => {
 })();
 // the page a hash route stands for, written as its real URL so reports read the same as Search Console
 function routePath() {
-  const h = (location.hash || "").slice(1).split("?")[0];
+  return location.pathname.replace(/\/+$/, "") || "/";
+  const h = (HASH() || "").slice(1).split("?")[0];
   if (!h) return location.pathname;
   if (h.startsWith("p-")) return "/peptides/" + h.slice(2);
   if (h.startsWith("v-") || h.startsWith("s-")) return "/vendors/" + h.slice(2);
@@ -1342,7 +1378,7 @@ function ctxOf(el) {
   if (el?.closest?.(".vhero")) return "store_page";
   if (el?.closest?.("#mbuy")) return "buy_bar";
   if (el?.closest?.("#seo")) return "seo";
-  const h = (location.hash || "#home").slice(1);
+  const h = (HASH() || "#home").slice(1);
   return h.startsWith("p-") ? "product" : h.startsWith("v-") ? "store_page" : h === "protocol" || h === "list" ? "route" : h || "home";
 }
 function trackOut(vid, pep, size, ctx) { TRK.push({ kind: "out", vendor: vid, pep: pep || null, size: size || null, ctx, path: routePath() }); }
@@ -1363,7 +1399,7 @@ document.addEventListener("input", e => { if (e.target.id === "nq" || e.target.i
 let STATS = null, STATS_DAYS = 30;
 async function loadStats() {
   try { const [st, ib] = await Promise.all([rpc("pk_stats", { p_key: ownerKey(), p_days: STATS_DAYS }), rpc("pk_owner_inbox", { p_key: ownerKey() }).catch(() => null)]); STATS = st; STATS.inbox = ib; } catch { STATS = { error: true }; }
-  if ((location.hash || "") === "#stats") route(true);
+  if ((HASH() || "") === "#stats") route(true);
 }
 function vStats() {
   if (!ownerKey()) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>Owner only</b><p>Sign in with the owner key on the Vendors page first.</p><a class="btn" href="#vendors">Vendors</a></div></div>`;
@@ -1458,7 +1494,7 @@ function suggest(q) {
 }
 function refreshGrid() {
   if ($("#vmatch")) $("#vmatch").innerHTML = vMatch();
-  const r = catalogGrid(location.hash === "#search" ? 0 : 24); if ($("#pgrid")) { $("#pgrid").innerHTML = r.html; $("#catmeta").textContent = `${r.n} peptides · ${r.offers} offers`; }
+  const r = catalogGrid(HASH() === "#search" ? 0 : 24); if ($("#pgrid")) { $("#pgrid").innerHTML = r.html; $("#catmeta").textContent = `${r.n} peptides · ${r.offers} offers`; }
   $$("[data-cat]").forEach(b => b.tagName === "BUTTON" && b.setAttribute("aria-pressed", b.dataset.cat === S.cat));
 }
 
@@ -1466,11 +1502,11 @@ function refreshGrid() {
 let lastRoute = "";
 function linkAdd() {
   // PepKeep link: #list?add=Name size*qty;...  (also ?add= in the query). Names and vial sizes only, never doses or who it's for.
-  const hm = (location.hash || "").match(/^#list\?(.*)$/), q = new URLSearchParams(hm ? hm[1] : location.search), raw = q.get("add");
+  const hm = (HASH() || "").match(/^#list\?(.*)$/), q = new URLSearchParams(hm ? hm[1] : location.search), raw = q.get("add");
   if (raw == null) return;
   const from = (q.get("from") || "").toLowerCase();
   const items = []; raw.split(";").slice(0, 40).forEach(t => { const m = t.match(/^(.*?)\s*\*\s*(\d{1,3})\s*$/), qty = m ? Math.max(1, Math.min(99, +m[2])) : 1; const f = parseList(m ? m[1] : t)[0]; if (f) { const x = items.find(i => i.pep === f.pep && i.size === f.size); x ? x.qty += qty : items.push({ ...f, qty }); } });
-  history.replaceState(null, "", location.pathname + "#list");
+  history.replaceState(null, "", "/list");
   if (!items.length) { toast("We couldn't match anything in that list"); return; }
   if (from === "pepkeep") PROT = [];
   items.forEach(i => { const x = PROT.find(p => p.pep === i.pep && i.size === p.size); x ? x.qty = i.qty : PROT.push(i); WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; });
@@ -1485,8 +1521,8 @@ const pkLink = () => {
 function route(keepScroll) {
   if (!D) return;
   linkAdd();
-  const hq = new URLSearchParams((location.hash.split("?")[1]) || "");
-  let h = (location.hash || "").slice(1).split("?")[0] || (document.getElementById("seo")?.dataset.route === "doc" ? "doc" : "home");
+  const hq = new URLSearchParams((HASH().split("?")[1]) || "");
+  let h = (HASH() || "").slice(1).split("?")[0] || (document.getElementById("seo")?.dataset.route === "doc" ? "doc" : "home");
   if (h.startsWith("s-")) h = "v-" + h.slice(2);
   if (h === "sellers") h = "vendors";
   if (h === "list") h = "protocol";   // "My list" page; #protocol kept for old links
@@ -1510,7 +1546,6 @@ function route(keepScroll) {
   // and move the address back to "/" so a shared link doesn't pair one page's path with another's view.
   const seo = $("#seo"), own = seo && (seo.dataset.route === h || (seo.dataset.route === "home" && h === "home"));
   if (seo) seo.hidden = !own;
-  if (seo && !own && location.pathname !== "/") history.replaceState(history.state, "", "/" + location.hash);
   trackView();
   const pv = $("[data-pep]");
   if (pv) drawChart(pv.dataset.pep, pv.dataset.size);
@@ -1540,12 +1575,12 @@ document.addEventListener("click", async e => {
   if (!t.closest(".bellwrap")) closeDD();
   if (t.closest('a[href="#search"]')) focusQ = true;
   const th = t.closest("[data-theme-set]"); if (th) { setTheme(th.dataset.themeSet); return; }
-  if (t.closest("[data-back]")) { history.length > 1 ? history.back() : location.hash = "#home"; return; }
+  if (t.closest("[data-back]")) { if (NAVS > 0) { NAVS--; history.back(); } else go("/", true); return; }
   const wt = t.closest("[data-watch]"); if (wt) { e.preventDefault(); toggleWatch(wt.dataset.watch, wt.dataset.size); return; }
   const cat = t.closest("[data-cat]"); if (cat) {
     S.cat = cat.dataset.cat;
-    if (cat.tagName === "A") { if (location.hash === "#home" || !location.hash) { e.preventDefault(); refreshGrid(); $("#catalog")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth" }); } return; }
-    if (location.hash === "#home" || location.hash === "#search" || !location.hash) { if (isM() && (location.hash || "#home") === "#home" && !$("#sheet").classList.contains("open")) { location.hash = "#search"; return; } refreshGrid(); }
+    if (cat.tagName === "A") { if (HASH() === "#home" || !HASH()) { e.preventDefault(); refreshGrid(); $("#catalog")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth" }); } return; }
+    if (HASH() === "#home" || HASH() === "#search" || !HASH()) { if (isM() && (HASH() || "#home") === "#home" && !$("#sheet").classList.contains("open")) { go("#search"); return; } refreshGrid(); }
     return;
   }
   const fl = t.closest("[data-filt]"); if (fl) { S[fl.dataset.filt] = !S[fl.dataset.filt]; saveS(); $$(`[data-filt="${fl.dataset.filt}"]`).forEach(x => x.setAttribute("aria-checked", S[fl.dataset.filt])); if ($("#sheet").classList.contains("open")) { const b = $("#sheet .sfoot .btn.p"); if (b) b.textContent = `Show ${vis().length} offers`; refreshGrid(); } else route(true); return; }
@@ -1572,17 +1607,17 @@ document.addEventListener("click", async e => {
   const np = t.closest("[data-npref]"); if (np) { const k = "pf_n_" + np.dataset.npref, v = !store.get(k, true); store.set(k, v); np.setAttribute("aria-checked", v); return; }
   if (t.closest("[data-markread]")) { store.set("pf_seen_alerts", Date.now()); openedAt = Date.now(); closeDD(); route(true); return; }
   const af = t.closest("[data-afilt]"); if (af) { afilt = af.dataset.afilt; route(true); return; }
-  const as = t.closest("[data-aseg]"); if (as) { location.hash = "#" + as.dataset.aseg; return; }
+  const as = t.closest("[data-aseg]"); if (as) { go("#" + as.dataset.aseg); return; }
   // protocol
   const im = t.closest("[data-imp]"); if (im) { if (im.tagName === "A") { if (im.dataset.imp === "paste") setTimeout(pasteSheet, 50); else setTimeout(() => $("#pdfIn")?.click(), 120); return; } e.preventDefault(); pasteSheet(); return; }
-  if (t.closest("[data-pastego]")) { const f = parseList($("#pasteTxt").value); if (!f.length) { $("#pastePrev").textContent = "We didn't recognize any compounds. Check the spelling, one per line."; return; } const n = addItems(f); closeSheet(); if (location.hash !== "#list") location.hash = "#list"; else route(); toast(`Added ${n} item${n === 1 ? "" : "s"} to your list`); return; }
+  if (t.closest("[data-pastego]")) { const f = parseList($("#pasteTxt").value); if (!f.length) { $("#pastePrev").textContent = "We didn't recognize any compounds. Check the spelling, one per line."; return; } const n = addItems(f); closeSheet(); if (HASH() !== "#list") go("#list"); else route(); toast(`Added ${n} item${n === 1 ? "" : "s"} to your list`); return; }
   const ai = t.closest("[data-additem]"); if (ai) { addSheet(ai.dataset.additem); return; }
   const ap = t.closest("[data-addpick]"); if (ap) { const [p, s] = ap.dataset.addpick.split("|"); if (ap.dataset.mode === "watch") { WATCH[p + "|" + s] = { target: null, on: true, drop: true, restock: true, sale: true }; saveW(); toast(`Watching ${short(p)} ${sizeTxt(s)}`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}`); } closeSheet(); route(true); return; }
   const al2 = t.closest("[data-addlist]"); if (al2) { const [p, s] = al2.dataset.addlist.split("|"); if (PROT.some(i => i.pep === p && i.size === s)) { PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)} from your list`); } else { addItems([{ pep: p, size: s, qty: 1 }]); toast(`Added ${short(p)} ${sizeTxt(s)}. See the cheapest cart in Protocol.`); } route(true); return; }
   if (t.closest("[data-one]")) { S.one = !S.one; S.open = null; saveS(); route(true); return; }
   if (t.closest("[data-checklist]")) { checklistSheet(); return; }
   const ck2 = t.closest("[data-chk]"); if (ck2) { const k = ck2.dataset.chk; CHK.has(k) ? CHK.delete(k) : CHK.set(k, 1); const on = CHK.has(k); ck2.setAttribute("aria-pressed", on); ck2.textContent = (on ? "✓ " : "") + sizeTxt(k.split("|")[1]); $("#chkGo").textContent = chkLabel(); return; }
-  if (t.closest("[data-chkgo]")) { if (!CHK.size) return; PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); PROT.forEach(i => { WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; }); saveP(); store.set("pf_watch", WATCH); closeSheet(); if (location.hash !== "#list") location.hash = "#list"; else route(); return; }
+  if (t.closest("[data-chkgo]")) { if (!CHK.size) return; PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); PROT.forEach(i => { WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; }); saveP(); store.set("pf_watch", WATCH); closeSheet(); if (HASH() !== "#list") go("#list"); else route(); return; }
   const bd = t.closest("[data-board]"); if (bd) { boardSheet(bd.dataset.board); return; }
   if (t.closest("[data-boardgo]")) { boardGo(); return; }
   if (t.closest("[data-boardopen]")) { boardOpen(); return; }
@@ -1630,8 +1665,8 @@ document.addEventListener("change", async e => {
 });
 document.addEventListener("input", e => {
   const t = e.target;
-  if (t.id === "nq") { S.q = t.value; suggest(t.value); if ((location.hash || "#home") === "#home" || location.hash === "#search") refreshGrid(); }
-  if (t.id === "mq") { S.q = t.value; if (location.hash !== "#search") { focusQ = true; location.hash = "#search"; } else refreshGrid(); }
+  if (t.id === "nq") { S.q = t.value; suggest(t.value); if ((HASH() || "#home") === "#home" || HASH() === "#search") refreshGrid(); }
+  if (t.id === "mq") { S.q = t.value; if (HASH() !== "#search") { focusQ = true; go("#search"); } else refreshGrid(); }
   if (t.id === "chkQ") $("#chkRes").innerHTML = chkRes(t.value);
   if (t.id === "addQ") $("#addRes").innerHTML = addRes(t.value, $("#addRes").dataset.mode);
   if (t.id === "pasteTxt") { const f = parseList(t.value); $("#pastePrev").textContent = f.length ? "Found: " + f.map(x => short(x.pep) + " " + sizeTxt(x.size)).join(", ") : ""; }
@@ -1649,11 +1684,11 @@ document.addEventListener("submit", async e => {
   try { await rpc("pf_admin", { p_key: ownerKey(), p_action: "add", p_id: id, p_name: name, p_url: url }); toast(`Checking ${name}'s prices. This takes about a minute.`, 5000); renderOwner(); watchStore(id, name); } catch (err) { toast("Couldn't add: " + err.message); }
 });
 document.addEventListener("keydown", e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); if (isM()) { focusQ = true; location.hash = "#search"; } else $("#nq")?.focus(); return; }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); if (isM()) { focusQ = true; go("#search"); } else $("#nq")?.focus(); return; }
   if (e.key === "Escape") { closeSheet(); closeDD(); $("#sugg")?.classList.remove("open"); return; }
   if (e.target.id === "nq" && ["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
     const opts = $$("#sugg a"); if (!opts.length) return;
-    if (e.key === "Enter") { e.preventDefault(); location.hash = (opts[Math.max(0, sIdx)]).getAttribute("href"); $("#sugg").classList.remove("open"); return; }
+    if (e.key === "Enter") { e.preventDefault(); go((opts[Math.max(0, sIdx)]).getAttribute("href")); $("#sugg").classList.remove("open"); return; }
     e.preventDefault(); sIdx = (sIdx + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length; opts.forEach((o, i) => o.classList.toggle("on", i === sIdx));
   }
   if (e.key === "Enter" && e.target.id === "mq") e.target.blur();
@@ -1662,7 +1697,22 @@ document.addEventListener("keydown", e => {
     if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
   }
 });
-addEventListener("hashchange", () => { closeSheet(); route(); });
+addEventListener("hashchange", () => { if (APP_ROUTES.test(location.hash)) { history.replaceState(null, "", toPath(location.hash)); closeSheet(); route(); } });
+addEventListener("popstate", () => { closeSheet(); route(); });
+// in-app links: same-origin page links navigate without a reload
+document.addEventListener("click", e => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const a = e.target.closest?.("a[href]"); if (!a || a.target || a.hasAttribute("download")) return;
+  const href = a.getAttribute("href");
+  let path = null;
+  if (APP_ROUTES.test(href)) path = toPath(href);
+  else if (href.startsWith("/") && !href.startsWith("//") && !/^\/(api|mock)\//.test(href) && !/\.[a-z0-9]{2,5}($|\?)/i.test(href)) path = href;
+  if (path === null) return;
+  e.preventDefault(); go(path);
+});
+// show real addresses on links (hover, copy, share), not "#p-..." routes
+const fixLinks = root => root.querySelectorAll?.('a[href^="#"]').forEach(a => { const h = a.getAttribute("href"); if (APP_ROUTES.test(h)) a.setAttribute("href", toPath(h)); });
+new MutationObserver(ms => { for (const m of ms) m.addedNodes.forEach(n => n.nodeType === 1 && (fixLinks(n), n.matches?.('a[href^="#"]') && fixLinks(n.parentNode || n))); }).observe(document.documentElement, { childList: true, subtree: true });
 let wasM = isM(); addEventListener("resize", () => { if (isM() !== wasM) { wasM = isM(); route(true); } });
 if (window.visualViewport) visualViewport.addEventListener("resize", () => document.body.classList.toggle("kb", isM() && visualViewport.height < innerHeight * .75));
 
@@ -1701,12 +1751,9 @@ function paintFresh() {
 }
 // Real URLs (/peptides/bpc-157, /vendors/core, /influencers/...) open the matching app view.
 function pathBoot() {
-  if (location.hash) return;
-  const p = location.pathname.replace(/\/$/, ""), seo = document.getElementById("seo")?.dataset.route;
-  let h = seo && seo !== "home" ? seo : "";
-  if (!h) { let m; if ((m = p.match(/^\/peptides\/([^/]+)/))) h = "p-" + m[1]; else if ((m = p.match(/^\/vendors\/([^/]+)/))) h = "v-" + m[1]; else if (p === "/vendors" || p === "/influencers") h = "vendors"; else if (p === "/peptides") h = "search"; else if (p === "/sales") h = "sales"; else if (/^\/(method|about|terms|privacy|contact)$/.test(p)) h = "doc"; }
-  if (p.startsWith("/influencers")) S.vtie = p === "/influencers";
-  if (h && h !== "doc") history.replaceState(null, "", location.pathname + location.search + "#" + h);
+  // old links like pepseekr.com/#p-bpc-157 or /#list?add=... (PepKeep, push alerts, emails) move to their clean path
+  if (location.hash && APP_ROUTES.test(location.hash)) history.replaceState(null, "", toPath(location.hash));
+  if (location.pathname.startsWith("/influencers")) S.vtie = location.pathname === "/influencers";
 }
 (function boot() {
   pathBoot();   // must run before any route(), or a cached render resets the real URL
