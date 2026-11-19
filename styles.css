@@ -877,3 +877,6 @@ tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset
 .wrm:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 @media (max-width:1100px) and (min-width:768px){.wr{grid-template-columns:1fr 150px 110px 44px}}
 @media (max-width:767px){.wr{grid-template-columns:1fr auto 44px}.wr>button.wrm{grid-row:1/span 2;grid-column:3}}
+.wst[aria-pressed="true"]{color:var(--brand);font-weight:600}.wst[aria-pressed="true"] svg{fill:currentColor}
+.awbox{font-size:14px}
+.wst{display:inline-flex;align-items:center;gap:2px}.wst svg{display:inline-block;flex:none}

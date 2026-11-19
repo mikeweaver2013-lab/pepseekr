@@ -245,6 +245,10 @@ const promoPill = v => v.promo_text ? `<span class="pill p-sale" title="${esc(v.
 const isW = (p, s) => !!(WATCH[p + "|" + s]?.on);
 const watchingPep = p => Object.keys(WATCH).some(k => k.startsWith(p + "|") && WATCH[k].on);
 const inProt = p => PROT.some(i => i.pep === p);
+const AUTOW = () => store.get("pf_autowatch", true);
+// put vials on the watchlist, stopping at the Free limit; returns how many were added and whether the limit stopped it
+function watchItems(items) { let n = 0, cap = false; items.forEach(i => { const k = i.pep + "|" + i.size; if (WATCH[k]?.on) return; if (!watchAllowed()) { cap = true; return; } WATCH[k] = { target: null, on: true, drop: true, restock: true, sale: true }; n++; }); if (n) saveW(); return { n, cap }; }
+const awBox = () => `<button type="button" class="ck awbox" role="checkbox" aria-checked="${AUTOW()}" data-autow><span class="chk">${I.check}</span>Alert me when these drop in price</button>`;
 /* ---------- clean URLs ----------
    The app still thinks in "#route" strings (p-bpc-157, v-core, alerts...). HASH() derives that string from the real
    path, toPath() turns one back into a path, and go() navigates with history.pushState (no page reload). */
@@ -747,7 +751,7 @@ function vProtocol() {
   };
   const itemRow = x => `<div class="item"><span class="vwell vw">${vial(x.pep, x.size, 58)}</span><div style="min-width:0"><div><a class="nm" href="#p-${slugOf(x.pep)}">${esc(short(x.pep))}</a> <span class="mono t3" style="font-size:12.5px">${esc(sizeTxt(x.size))}</span><span class="qty" aria-label="Quantity"><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|-1" aria-label="One fewer">−</button><span>${x.qty}</span><button type="button" data-qty="${esc(x.pep)}|${esc(x.size)}|1" aria-label="One more">+</button></span></div>
       <div class="hint" style="margin-top:3px">${x.offers.length ? `${x.offers.length} store${x.offers.length > 1 ? "s" : ""} in stock · from ${money2(x.offers[0].price)}` : `<span class="warn">No vendor has this in stock</span>`}</div>
-      <div class="row" style="gap:12px;margin-top:4px"><button class="link" type="button" data-swap="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px">${x.all.length > 1 ? x.all.length + " offers ▾" : "Change size"}</button><button class="link" type="button" data-rm="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px;color:var(--text-3)">Remove</button></div></div></div>`;
+      <div class="row" style="gap:12px;margin-top:4px"><button class="link wst" type="button" data-watch="${esc(x.pep)}" data-size="${esc(x.size)}" aria-pressed="${isW(x.pep, x.size)}" style="font-size:13px">${I.star.replace("<svg", '<svg style="width:15px;height:15px;vertical-align:-2px;margin-right:3px"')}${isW(x.pep, x.size) ? "Watching" : "Watch"}</button><button class="link" type="button" data-swap="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px">${x.all.length > 1 ? x.all.length + " offers ▾" : "Change size"}</button><button class="link" type="button" data-rm="${esc(x.pep)}|${esc(x.size)}" style="font-size:13px;color:var(--text-3)">Remove</button></div></div></div>`;
   const coverNote = () => {
     const have = R.rec ? R.rec.assign.length : 0, missing = R.rec ? R.rec.missing.filter(m => !R.C.unavail.includes(m)) : [];
     if (R.one && R.multi && R.multi.assign.length > have) return `<div class="note warn" style="margin-top:12px">No single store has all ${nItems} items. The best one covers ${have}. Turn off <b>one seller</b> to get all ${R.multi.assign.length} from ${R.multi.n} stores for ${money2(R.multi.total)}.</div>`;
@@ -757,13 +761,13 @@ function vProtocol() {
   const tabs = [["rec", "Recommended", R.rec], ["low", "Lowest price", R.low], ["few", "Fewest stops", R.few], ["value", "Best value", R.val]];
   const ctl = `<div class="rtabs" role="radiogroup" aria-label="Route">${tabs.map(([k, t, r]) => `<button class="chip" type="button" role="radio" data-strat="${k}" aria-checked="${tab === k && !S.open}" aria-pressed="${tab === k && !S.open}">${t}${r ? ` <span class="mono">${money2(r.total)}</span>` : ""}</button>`).join("")}</div>
     <div class="row" style="gap:16px;margin-top:10px"><button type="button" class="ck" role="checkbox" aria-checked="${R.swaps}" data-swaps><span class="chk">${I.check}</span>Allow size swaps</button><button type="button" class="ck" role="checkbox" aria-checked="${R.one}" data-one><span class="chk">${I.check}</span>Buy everything from one seller</button></div>`;
-  return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">My list</span></span><h1 class="h1" style="margin-top:12px">Your list, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors, shipping included.` : "Check off what you need. We find the cheapest way to buy it, shipping included, from one store or several."}</p></div></div>
+  return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">My list</span></span><h1 class="h1" style="margin-top:12px">Your protocol, priced.</h1><p class="t2" style="margin-top:8px">${PROT.length ? `${PROT.length} items, checked against ${live().length} offers from ${vendors().length} vendors, shipping included.` : "Check off what you need. We find the cheapest way to buy it, shipping included, from one store or several."}</p></div></div>
     <div class="imp"><button class="card itile" type="button" data-checklist><span class="hd">${I.list} Check off a list</span><span class="hint">Pick everything you need</span></button><button class="card itile" type="button" data-imp="paste"><span class="hd">${I.paste} Paste a list</span><span class="hint">Type or paste names</span></button><label class="card itile"><span class="hd">${I.file} PDF</span><span class="hint">Drop a file</span><input type="file" id="pdfIn" accept="application/pdf" aria-label="Import a PDF"></label></div>
     ${PROT.length && sel ? `<div style="margin-top:16px">${pro ? ctl : lockedCtl(R, tabs)}</div>
     ${coverNote()}
     <div class="itins" style="margin-top:14px">${list.map(card).join("")}</div>
     ${R.C.unavail.length ? `<p class="hint warn" style="margin-top:10px">Not in stock anywhere right now: ${R.C.unavail.map(m => esc(short(m.pep)) + " " + esc(sizeTxt(m.size))).join(", ")}. Add it to your watchlist to hear when it's back.</p>` : ""}
-    <div class="card" style="margin-top:16px"><div class="phd"><span class="lbl">Your list · ${PROT.length}</span><button class="link" type="button" data-checklist>+ Add items</button></div><div class="items">${R.C.items.map(itemRow).join("")}</div></div>` :
+    <div class="card" style="margin-top:16px"><div class="phd"><span class="lbl">Your protocol · ${PROT.length}</span><span class="row" style="gap:16px">${PROT.some(i => !isW(i.pep, i.size)) ? `<button class="link wst" type="button" data-watchall>${I.star.replace("<svg", '<svg style="width:15px;height:15px;vertical-align:-2px;margin-right:3px"')}Watch all</button>` : `<span class="hint">All watched</span>`}<button class="link" type="button" data-checklist>+ Add items</button></span></div><div class="items">${R.C.items.map(itemRow).join("")}</div></div>` :
     PROT.length ? `<div class="card empty" style="margin-top:16px"><span class="ei">${I.list}</span><b>Nothing on your list is in stock</b><p>Try another size, or add these to your watchlist.</p></div><div class="card" style="margin-top:16px"><div class="items">${R.C.items.map(itemRow).join("")}</div></div>` :
     `<div class="card empty" style="margin-top:16px"><span class="ei">${I.list}</span><b>Your list is empty</b><p>Check off the vials you need, paste a list, or drop a PDF. We read names and vial sizes only.</p><button class="btn p" type="button" data-checklist>Check off a list</button></div>`}
     </div>`;
@@ -774,7 +778,7 @@ function checklistSheet() {
   openSheet(`<div class="shd"><h2>What do you need?</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div><p class="hint">Tap a size to check it off. Tap again to uncheck.</p>
     <label class="msearch" style="display:flex;height:48px;border:1px solid var(--border-2);border-radius:12px;align-items:center;gap:10px;padding:0 14px;margin-top:10px">${I.search.replace("<svg", '<svg style="width:18px;height:18px"')}<input id="chkQ" type="search" placeholder="Search peptides" style="flex:1;border:0;background:none;outline:none;height:100%;font-size:16px" autocomplete="off" aria-label="Search peptides"></label>
     <div id="chkRes" class="vlist" style="margin-top:8px">${chkRes("")}</div>
-    <div class="sfoot"><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-chkgo id="chkGo">${chkLabel()}</button></div>`, "What do you need?");
+    <div style="margin-top:10px">${awBox()}</div><div class="sfoot"><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-chkgo id="chkGo">${chkLabel()}</button></div>`, "What do you need?");
 }
 const chkLabel = () => CHK.size ? `Price ${CHK.size} item${CHK.size > 1 ? "s" : ""}` : "Pick at least one";
 function chkRes(q) {
@@ -804,13 +808,19 @@ function parseList(txt) {
     const sizes = [...new Set(ROWS.filter(r => r.pep === hit.p).map(r => r.size))];
     let size = m && sizes.find(s => s.toLowerCase() === (m[1] + m[2]).toLowerCase());
     if (!size) { const b = bestOf(ROWS.filter(r => r.pep === hit.p)); size = b ? b.size : sizes[0]; }
-    if (size && !found.some(f => f.pep === hit.p && f.size === size)) found.push({ pep: hit.p, size, qty: 1 });
+    const qm = l.match(/(?:\bx\s*|×\s*|\bqty:?\s*)(\d{1,2})\b|\b(\d{1,2})\s*(?:x|×|vials?)\b(?!\s*\d)/), qty = qm ? Math.min(20, Math.max(1, +(qm[1] || qm[2]))) : 1;
+    if (size && !found.some(f => f.pep === hit.p && f.size === size)) found.push({ pep: hit.p, size, qty });
   });
   return found;
 }
 function addItems(list) {
-  let n = 0; list.forEach(i => { if (!PROT.some(x => x.pep === i.pep && x.size === i.size)) { PROT.push(i); n++; } const k = i.pep + "|" + i.size; WATCH[k] ??= { target: null, on: true, drop: true, restock: true, sale: true }; });
-  saveP(); store.set("pf_watch", WATCH); return n;
+  const fresh = list.filter(i => !PROT.some(x => x.pep === i.pep && x.size === i.size));
+  PROT.push(...fresh); saveP(); autoWatch(fresh); return fresh.length;
+}
+function autoWatch(items) {
+  if (!AUTOW() || !items.length) return;
+  const r = watchItems(items);
+  if (r.cap) setTimeout(() => toast(`Watching ${r.n ? r.n + " of them. " : ""}Free accounts can watch ${FREE_WATCH} vials; Pro watches your whole list.`, 5000), 3300);
 }
 async function importPdf(file) {
   toast("Reading the compounds…");
@@ -885,13 +895,13 @@ function storesSheet() {
 }
 function pasteSheet() {
   openSheet(`<div class="shd"><h2>Paste your list</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div><p class="hint">One compound per line, with the vial size if you know it. We read names and sizes only.</p>
-    <textarea class="field" id="pasteTxt" style="height:180px;margin-top:12px" placeholder="BPC-157 10mg&#10;TB-500 5mg&#10;Retatrutide 20mg"></textarea><p class="hint" id="pastePrev" style="margin-top:8px"></p>
+    <textarea class="field" id="pasteTxt" style="height:180px;margin-top:12px" placeholder="BPC-157 10mg&#10;TB-500 5mg&#10;Retatrutide 20mg"></textarea><p class="hint" id="pastePrev" style="margin-top:8px"></p><div style="margin-top:6px">${awBox()}</div>
     <div class="sfoot"><button class="btn" type="button" data-close>Cancel</button><button class="btn p" type="button" data-pastego>Add to my list</button></div>`, "Paste your list");
 }
 function addSheet(mode) {
   openSheet(`<div class="shd"><h2>${mode === "watch" ? "Watch a peptide" : "Add an item"}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
     <label class="msearch" style="display:flex;height:48px;border:1px solid var(--border-2);border-radius:12px;align-items:center;gap:10px;padding:0 14px">${I.search.replace("<svg", '<svg style="width:18px;height:18px"')}<input id="addQ" type="search" placeholder="Search peptides" style="flex:1;border:0;background:none;outline:none;height:100%;font-size:16px" autocomplete="off" aria-label="Search peptides"></label>
-    <div id="addRes" class="vlist" style="margin-top:8px" data-mode="${mode || "proto"}">${addRes("", mode)}</div>`, "Add an item");
+    ${mode === "watch" ? "" : `<div style="margin-top:10px">${awBox()}</div>`}<div id="addRes" class="vlist" style="margin-top:8px" data-mode="${mode || "proto"}">${addRes("", mode)}</div>`, "Add an item");
   setTimeout(() => $("#addQ")?.focus(), 60);
 }
 function addRes(q, mode) {
@@ -1644,7 +1654,7 @@ document.addEventListener("click", async e => {
   if (t.closest("[data-one]")) { S.one = !S.one; S.open = null; saveS(); route(true); return; }
   if (t.closest("[data-checklist]")) { checklistSheet(); return; }
   const ck2 = t.closest("[data-chk]"); if (ck2) { const k = ck2.dataset.chk; CHK.has(k) ? CHK.delete(k) : CHK.set(k, 1); const on = CHK.has(k); ck2.setAttribute("aria-pressed", on); ck2.textContent = (on ? "✓ " : "") + sizeTxt(k.split("|")[1]); $("#chkGo").textContent = chkLabel(); return; }
-  if (t.closest("[data-chkgo]")) { if (!CHK.size) return; PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); PROT.forEach(i => { WATCH[i.pep + "|" + i.size] ??= { target: null, on: true, drop: true, restock: true, sale: true }; }); saveP(); store.set("pf_watch", WATCH); closeSheet(); if (HASH() !== "#list") go("#list"); else route(); return; }
+  if (t.closest("[data-chkgo]")) { if (!CHK.size) return; const had = new Set(PROT.map(i => i.pep + "|" + i.size)); PROT = [...CHK.entries()].map(([k, q]) => { const [pep, size] = k.split("|"); return { pep, size, qty: q }; }); saveP(); autoWatch(PROT.filter(i => !had.has(i.pep + "|" + i.size))); closeSheet(); if (HASH() !== "#list") go("#list"); else route(); return; }
   const bd = t.closest("[data-board]"); if (bd) { boardSheet(bd.dataset.board); return; }
   if (t.closest("[data-boardgo]")) { boardGo(); return; }
   if (t.closest("[data-boardopen]")) { boardOpen(); return; }
@@ -1655,7 +1665,10 @@ document.addEventListener("click", async e => {
   if (t.closest("[data-swaps]")) { S.swaps = S.swaps === false; S.open = null; saveS(); route(true); return; }
   const it = t.closest("[data-itin]"); if (it) { const [k, m] = it.dataset.itin.split("|"); const cur = document.querySelector(".itin[aria-expanded=true] [data-itin]"); if (cur === it) return; S.open = k; S.openMode = m; route(true); return; }
   const q = t.closest("[data-qty]"); if (q) { const [p, s, d] = q.dataset.qty.split("|"); const it = PROT.find(i => i.pep === p && i.size === s); it.qty = Math.max(1, Math.min(20, it.qty + +d)); saveP(); route(true); return; }
-  const rm = t.closest("[data-rm]"); if (rm) { const [p, s] = rm.dataset.rm.split("|"); PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)}`); route(true); return; }
+  const rm = t.closest("[data-rm]"); if (rm) { const [p, s] = rm.dataset.rm.split("|"); if (isW(p, s)) { openSheet(`<div class="shd"><h2>Remove ${esc(short(p))} ${esc(sizeTxt(s))}?</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div><p class="hint">It's also on your watchlist. Keep getting price alerts for it?</p><div class="sfoot"><button class="btn" type="button" data-rmgo="${esc(p)}|${esc(s)}|0">Keep watching</button><button class="btn p" type="button" data-rmgo="${esc(p)}|${esc(s)}|1">Stop watching too</button></div>`, "Remove item"); return; } PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); toast(`Removed ${short(p)} ${sizeTxt(s)}`); route(true); return; }
+  const rg = t.closest("[data-rmgo]"); if (rg) { const [p, s, also] = rg.dataset.rmgo.split("|"); PROT = PROT.filter(i => !(i.pep === p && i.size === s)); saveP(); if (also === "1") { delete WATCH[p + "|" + s]; saveW(); } closeSheet(); route(true); toast(also === "1" ? `Removed ${short(p)} ${sizeTxt(s)} and stopped watching it` : `Removed ${short(p)} ${sizeTxt(s)}. Still on your watchlist`); return; }
+  const aw = t.closest("[data-autow]"); if (aw) { const v = !AUTOW(); store.set("pf_autowatch", v); $$("[data-autow]").forEach(b => b.setAttribute("aria-checked", v)); return; }
+  const wa = t.closest("[data-watchall]"); if (wa) { const r = watchItems(PROT); route(true); if (r.cap) upgradeSheet("watch"); else toast(`Watching ${r.n} more vial${r.n === 1 ? "" : "s"} from your protocol`); return; }
   const sw = t.closest("[data-swap]"); if (sw) { const [p, s] = sw.dataset.swap.split("|"); swapSheet(p, s); return; }
   const ss = t.closest("[data-setsize]"); if (ss) { const [p, s, n] = ss.dataset.setsize.split("|"); const it = PROT.find(i => i.pep === p && i.size === s); if (it && !PROT.some(i => i.pep === p && i.size === n && i !== it)) { it.size = n; saveP(); } closeSheet(); route(true); return; }
   // suggest-a-seller kind
