@@ -146,6 +146,8 @@ function score() {
     const credit = r => r.coa !== true ? 0 : r.coaState === "reused" ? 0 : r.coaState === "outdated" ? .5 : 1;
     v.coaPct = known.length ? Math.round(known.reduce((a, r) => a + credit(r), 0) / known.length * 100) : 0;
     v.coaReused = mine.filter(r => r.coaState === "reused").length;
+    // pages we couldn't check (login wall, site down) count half, same as a store we can't check at all
+    v.coaChecked = known.length; v.coaCredit = mine.length ? (known.reduce((a, r) => a + credit(r), 0) + 0.5 * (mine.length - known.length)) / mine.length : 0.5;
     // Rating: outside reputation as a prior (weight 8) blended with verified PepSeekr reviews (weight 1 each).
     // Outside signal: Finnrick's independent lab-test rating (share of acceptable tests) on a 1-5 scale.
     // Trustpilot removed the peptide stores in 2026, so it no longer counts.
@@ -163,7 +165,8 @@ function score() {
     const price = Math.max(0, Math.min(25, 12.5 + (1 - rel) * 50));
     // COA (20): the share of this vendor's product pages where we found a current certificate of analysis.
     // If we can't check a store's pages (e.g. it blocks our checker), COA is neutral: 10 of 20, neither rewarded nor penalized.
-    const coa = v.coaKnown ? Math.round(20 * v.coaPct / 100) : 10;
+    // Pages we couldn't check inside an otherwise-checked store count as that same neutral half.
+    const coa = v.coaKnown ? Math.round(20 * v.coaCredit) : 10;
     // Shipping (10): a published free-shipping threshold earns the most; a known flat rate with no free shipping earns 5;
     // a store whose rates only appear at checkout sits in between at 7, since unknown isn't the same as worst.
     let ship = v.free_ship_over != null ? (v.free_ship_over <= 150 ? 10 : v.free_ship_over <= 250 ? 8 : 6) : v.ship_flat != null ? 5 : 7;
@@ -242,7 +245,7 @@ const theirRev = (v, txt) => v.site_reviews_url ? `<a class="link" href="${esc(v
 const mktTxt = v => { const d = Math.round((v.priceIdx - 1) * 100); return d === 0 ? "at market" : (d < 0 ? "−" + -d + "%" : "+" + d + "%") + " vs market"; };
 function shipText(v) { const b = []; if (v.ship_flat != null) b.push(money(+v.ship_flat) + " flat"); if (v.free_ship_over != null) b.push("free over " + money(+v.free_ship_over)); return b.join(", ") || "Shown at checkout"; }
 const poss = n => n + (/s$/i.test(n) ? "'" : "'s");
-const coaPctTxt = v => v.coaKnown ? v.coaPct + "%" : "n/a";
+const coaPctTxt = v => !v.coaKnown ? "n/a" : v.coaChecked < v.count * 0.75 ? `${v.coaPct}% of ${v.coaChecked} checked` : v.coaPct + "%";
 // store logos saved on our own server (site/logos/<id>.png); a letter tile when we don't have one
 const LOGOS = new Set(["aavant", "ascension", "atomik", "behemoth", "biolongevity", "biostrategix", "biotech", "certifiedpep", "core", "evolve", "ezpeptides", "gentleman", "gila", "glacier", "hvy", "ionpeptide", "ldaminos", "milehigh", "modernaminos", "newbiorx", "nura", "paramount", "patriot", "pepshop", "primepeptides", "puratek", "stl", "swisschems", "thepeptideshop"]);
 const avatar = v => LOGOS.has(v.id) ? `<span class="av lg" aria-hidden="true"><img src="/logos/${esc(v.id)}.png" alt="" loading="lazy" decoding="async"></span>` : `<span class="av" aria-hidden="true">${esc(v.name[0])}</span>`;
@@ -572,7 +575,7 @@ function vVendor(id) {
   const coaRows = rows.filter(r => r.coa === true).sort((a, b) => a.pep.localeCompare(b.pep));
   const following = FOLLOW.has(id), hidden = HIDE.has(id);
   const bk = [["Lab results & reviews", v.pts.rep, 45], ["Price", v.pts.price, 25], ["COA", v.pts.coa, 20], ["Shipping", v.pts.ship, 10]];
-  return `<section class="vhero"><div class="gridbg"></div><div class="wrap in">${LOGOS.has(v.id) ? `<span class="mono-tile lg"><img src="/logos/${esc(v.id)}.png" alt="${esc(v.name)} logo"></span>` : `<span class="mono-tile">${esc(v.name[0])}</span>`}<div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${cartPill(v)}${v.coaKnown ? `<span class="coa">COA ${v.coaPct}%</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>${tieLine(v)}
+  return `<section class="vhero"><div class="gridbg"></div><div class="wrap in">${LOGOS.has(v.id) ? `<span class="mono-tile lg"><img src="/logos/${esc(v.id)}.png" alt="${esc(v.name)} logo"></span>` : `<span class="mono-tile">${esc(v.name[0])}</span>`}<div style="flex:1;min-width:240px"><div class="row" style="gap:10px"><h1 class="h1">${esc(v.name)}</h1>${vBadge(v)}${cartPill(v)}${v.coaKnown ? `<span class="coa">COA ${coaPctTxt(v)}</span>` : ""}${v.coaReused ? `<span class="coa bad" title="Report files that also appear at other sellers or for other compounds">⚠ ${v.coaReused} reused report${v.coaReused > 1 ? "s" : ""}</span>` : ""}</div>${tieLine(v)}
       <div class="mono t2" style="font-size:13px;margin-top:6px">${v.count} listings · lowest price on ${v.wins} vials · ${mktTxt(v)}</div>
       <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Finnrick tests"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
     <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length} · ${scoreWord(v.score)}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
