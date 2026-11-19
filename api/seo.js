@@ -130,9 +130,9 @@ function build(t, s, C) {
         ["Store scores, lab reports and creator ties", Y, Y],
         ["Lab report details: lot number, lab and test date", N, Y]]],
       ["Your protocol", [
-        ["Build it: check off, paste or drop a PDF", Y, Y],
-        ["Saved and synced across your devices", "Signed in", Y],
-        ["Cheapest way to buy it, shipping included", "Lowest price", "Every route"],
+        ["Build it: check off, paste, drop a PDF or send from PepKeep", N, Y],
+        ["Saved and synced across your devices", N, Y],
+        ["Cheapest way to buy it, shipping included", N, "Every route"],
         ["Fewest stops, best value and one-seller routes", N, Y],
         ["Size swaps (two 5 mg when they beat one 10 mg)", N, Y],
         ["Fill my cart at stores that allow it", N, Y]]],
@@ -146,10 +146,10 @@ function build(t, s, C) {
     ];
     const faqs = [
       ["Does Pro change prices, scores or rankings?", "No. Every store is listed for free and none pay for placement. Pro adds tools for you; it never changes what a store pays, what you pay a store, or the order stores appear in."],
-      ["Do I need an account to use PepSeekr?", "No. Prices, deals, store pages and lab reports are open to everyone. A free account saves your protocol and watchlist across devices and adds the weekly email."],
+      ["Do I need an account to use PepSeekr?", "No. Prices, deals, store pages and lab reports are open to everyone. A free account saves your watchlist across devices and adds the weekly email. Protocols are part of Pro."],
       ["How do watchlist alerts work?", "Star a vial and set how far it has to drop, 15% unless you change it. We check every store every 2 hours. Free watches 3 vials with in-app and home-screen alerts. Pro watches as many as you like and also emails you, at most once every 3 hours."],
       ["What is Fill my cart?", "At stores that allow it, PepSeekr puts the items from your protocol into that store's own cart, so you land on their checkout with everything added. You still check out and pay on the store's site."],
-      ["How do I cancel?", "From your account page, any time. Pro stays on until the end of the period you paid for, then your account goes back to Free. Your protocol and your first 3 watched vials stay."],
+      ["How do I cancel?", "From your account page, any time. Pro stays on until the end of the period you paid for, then your account goes back to Free. Your protocol is kept for when you come back, and your first 3 watched vials stay active."],
       ["How do I pay?", "By card through Stripe. PepSeekr never sees or stores your card number."],
     ];
     const body = `<div class="prc">
@@ -158,10 +158,10 @@ function build(t, s, C) {
       <p class="prc-lede">Every price, deal and lab report is free for everyone. Pro is for people who buy a full protocol: every way to buy it, carts filled for you, and an email the moment a vial you watch drops.</p>
       <div class="prc-plans">
         <div class="prc-plan"><div class="prc-name">Free</div><div class="prc-amt"><b>$0</b></div><p class="prc-for">Compare prices and keep an eye on a few vials.</p>
-          <ul class="prc-list"><li>Every price, deal and lab report</li><li>Build your protocol and price it</li><li>Watch 3 vials, with in-app and phone alerts</li><li>Weekly email with your best prices</li></ul>
+          <ul class="prc-list"><li>Every price, deal and lab report</li><li>Watch 3 vials, with in-app and phone alerts</li><li>Weekly email with your best prices</li></ul>
           <a class="btn prc-cta" href="/peptides">Start comparing</a></div>
         <div class="prc-plan pro"><div class="prc-name">Pro</div><div class="prc-amt"><b>$6.99</b><span>a month</span></div><p class="prc-for">Or $49 a year, which works out to $4.08 a month.</p>
-          <ul class="prc-list"><li>Everything in Free</li><li>Every route: fewest stops, best value, one seller</li><li>Size swaps and Fill my cart</li><li>Unlimited watchlist with email alerts</li><li>Lot numbers, labs and test dates on lab reports</li></ul>
+          <ul class="prc-list"><li>Everything in Free</li><li>Your protocol: import it, price it every way, track every vial</li><li>Every route: fewest stops, best value, one seller</li><li>Size swaps and Fill my cart</li><li>Unlimited watchlist with email alerts</li><li>Lot numbers, labs and test dates on lab reports</li></ul>
           <div class="prc-btns"><button class="btn p prc-cta" type="button" data-plan="year">Get Pro yearly · $49</button><button class="btn prc-cta" type="button" data-plan="month">Monthly · $6.99</button></div>
           <p class="prc-fine">Cancel any time from your account.</p></div>
       </div>

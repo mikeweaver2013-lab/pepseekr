@@ -519,7 +519,7 @@ function vProduct(slug) {
     <div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
       <div class="card glow phead"><span class="vwell vw">${vial(p, size, 130)}</span><div style="min-width:0"><span class="lbl">${esc(catOf(p))}</span><h1>${esc(p)}</h1><div class="ln mono" style="font-size:13px">${nV} vendors · ${all.length} offers${b ? ` · best $/${unitTxt(b.unit)} at <a class="link" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">${esc(V[b.v].name)} ↗</a>` : ""}${rv.length ? ` · ★ ${avg.toFixed(1)} (${rv.length})` : ""}</div>
         <div class="sizes donly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money2(dealUnit(lb)) : "Out of stock"}</small><small>${g[s].length} offer${g[s].length === 1 ? "" : "s"}</small></button>`; }).join("")}</div></div>
-        <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price${promoOf(V[b.v]) ? " with deal" : ""}</span><b>${money2(dealUnit(b))}</b>${promoOf(V[b.v]) ? `<span class="row" style="gap:6px;margin-top:4px">${dealTag(V[b.v])}<span class="hint">${esc(dealNote(b))}</span></span>` : ""}<span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs average" : "at average"}</span><div class="pacts">${b.stock ? `<a class="btn p lg" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy at ${esc(V[b.v].name)} ${I.ext}</a>` : `<span class="pill p-n">Out of stock everywhere</span>`}<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch"}</button><button class="btn sm" type="button" data-addlist="${esc(p)}|${esc(size)}">${PROT.some(i => i.pep === p && i.size === size) ? I.check + " On my list" : I.plus + " Add to list"}</button></div><span class="ruo" style="text-align:right">Research use only</span></div></div></div>
+        <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price${promoOf(V[b.v]) ? " with deal" : ""}</span><b>${money2(dealUnit(b))}</b>${promoOf(V[b.v]) ? `<span class="row" style="gap:6px;margin-top:4px">${dealTag(V[b.v])}<span class="hint">${esc(dealNote(b))}</span></span>` : ""}<span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs average" : "at average"}</span><div class="pacts">${b.stock ? `<a class="btn p lg" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy at ${esc(V[b.v].name)} ${I.ext}</a>` : `<span class="pill p-n">Out of stock everywhere</span>`}<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch"}</button>${isPro() ? `<button class="btn sm" type="button" data-addlist="${esc(p)}|${esc(size)}">${PROT.some(i => i.pep === p && i.size === size) ? I.check + " On my list" : I.plus + " Add to list"}</button>` : proLock("protocol", "Add to list")}</div><span class="ruo" style="text-align:right">Research use only</span></div></div></div>
       <div class="sizes monly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money(dealUnit(lb)) : "out"}</small></button>`; }).join("")}</div>
       ${b.v && V[b.v].promo_text ? `<div class="promo"><b><a href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener" style="text-decoration:underline">${esc(V[b.v].name)} ↗</a>: ${esc(V[b.v].promo_text)}</b><div class="hint" style="margin-top:2px">${esc((V[b.v].promo_detail || "").replace(/\.?$/, ". ").replace(/^\. $/, ""))}${promoOf(V[b.v]) ? "The prices and $/mg below count this deal." : "Prices shown are before this discount."}</div></div>` : ""}
       ${affNote()}<div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("rep", "Hide low-rated")}</span><span class="donly">${ck("fill", "Fills your cart")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>${(() => { const on = [["stock", "In stock only"], ["coa", "COA on file"], ["rep", "Hide low-rated"], ["fill", "Fills your cart"], ["ship", "Including shipping"]].filter(([k]) => S[k]);
@@ -740,7 +740,19 @@ function routePlan() {
   if (one) { const mp = best(buildRoutes("cheapest", swaps, 5).routes), ml = mp[0]; if (ml) { const mt = Math.max(10, ml.total * 0.05); multi = mp.filter(r => r.total <= ml.total + mt).sort((a, b) => a.n - b.n || a.total - b.total)[0]; } }
   return { C, low, few, rec, val, nonstops, tol, swaps, one, multi };
 }
+// Free: the protocol is a Pro feature. Show what it does, keep anything saved, and offer the trial.
+function vProtocolLocked() {
+  const pend = store.get("pf_pending_add", null), saved = PROT.length, waiting = pend ? pend.raw.split(";").filter(Boolean).length : 0;
+  const feats = [[I.list, "Build it your way", "Check off what you need, paste a list, drop a PDF, or send it from PepKeep."], [I.cart || I.list, "Every way to buy it", "Lowest price, fewest stores, best value or one store, with shipping counted."], [I.check, "Size swaps and Fill my cart", "Two 5 mg vials when they beat one 10 mg, then your cart filled at the store."], [I.bell, "Alerts on everything on it", "Price drops and restocks on every vial, by push and email."]];
+  return `<div class="wrap"><div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">My list · Pro</span></span><h1 class="h1" style="margin-top:12px">Your protocol, priced every way.</h1>
+    <p class="t2" style="margin-top:8px;max-width:60ch">Add everything you take and PepSeekr works out the cheapest way to buy all of it, across every store, shipping included. Protocols are part of Pro.</p></div></div>
+    ${waiting || saved ? `<div class="card" style="margin-top:16px;padding:16px 18px"><b>${waiting ? `${waiting} item${waiting === 1 ? " from your link is" : "s from your link are"} waiting.` : `Your ${saved} saved item${saved === 1 ? " is" : "s are"} kept.`}</b> <span class="t2">${waiting ? "They load into your protocol as soon as you go Pro." : "They come back as soon as you go Pro."}</span></div>` : ""}
+    <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:16px">${feats.map(([ic, b, t]) => `<div class="card" style="padding:18px"><div class="row" style="gap:8px;align-items:center"><span class="pfi" aria-hidden="true">${ic}</span><b>${esc(b)}</b></div><p class="t2" style="margin-top:6px">${esc(t)}</p></div>`).join("")}</div>
+    <div class="row" style="gap:10px;margin-top:18px;flex-wrap:wrap"><button class="btn p" type="button" data-plan="year">Get Pro yearly · $49</button><button class="btn" type="button" data-plan="month">Monthly · $6.99</button><a class="link" href="/pricing" style="align-self:center">Compare Free and Pro</a></div>
+    <p class="hint" style="margin-top:12px">Watching vials stays free: star up to ${FREE_WATCH} and get alerts when they drop.</p></div>`;
+}
 function vProtocol() {
+  if (!isPro()) return vProtocolLocked();
   // Free: lowest price only, no swaps, no one-seller. Pro: every route.
   const pro = isPro(), keep = [S.swaps, S.one]; if (!pro) { S.swaps = false; S.one = false; }
   const R = routePlan(); if (!pro) [S.swaps, S.one] = keep;
@@ -1319,6 +1331,7 @@ function signInSheet(why) {
 
 /* upgrade */
 const PRO_PERKS = [
+  ["Your protocol", "Import it, price it every way, and track every vial on it"],
   ["Every route", "Recommended, fewest stops and best value, not just the lowest price"],
   ["Size swaps", "Two 5 mg vials when they beat one 10 mg, worked out for you"],
   ["Fill my cart", "We put your items in the store's cart so you just check out"],
@@ -1326,7 +1339,7 @@ const PRO_PERKS = [
   ["Email alerts", "An email when a watched vial hits your drop %, not just the weekly summary"],
   ["Lab report details", "Lot numbers, lab names and test dates on every COA"]
 ];
-const WHY = { routes: "Compare every way to buy your list.", swaps: "Let us swap sizes when two small vials beat one big one.", cart: "Let us fill your cart at this store.", watch: `Free accounts watch up to ${FREE_WATCH} vials. Pro watches as many as you like.`, lot: "See lot numbers, labs and test dates.", one: "Buy everything from one seller." };
+const WHY = { protocol: "Build your protocol and see the cheapest way to buy all of it. Protocols are part of Pro.", routes: "Compare every way to buy your list.", swaps: "Let us swap sizes when two small vials beat one big one.", cart: "Let us fill your cart at this store.", watch: `Free accounts watch up to ${FREE_WATCH} vials. Pro watches as many as you like.`, lot: "See lot numbers, labs and test dates.", one: "Buy everything from one seller." };
 let PENDING_PLAN = null;
 function upgradeSheet(reason) {
   openSheet(`<div class="shd"><h2>PepSeekr Pro</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
@@ -1588,9 +1601,11 @@ function refreshGrid() {
 let lastRoute = "";
 function linkAdd() {
   // PepKeep link: #list?add=Name size*qty;...  (also ?add= in the query). Names and vial sizes only, never doses or who it's for.
-  const hm = (HASH() || "").match(/^#list\?(.*)$/), q = new URLSearchParams(hm ? hm[1] : location.search), raw = q.get("add");
-  if (raw == null) return;
-  const from = (q.get("from") || "").toLowerCase();
+  const hm = (HASH() || "").match(/^#list\?(.*)$/), q = new URLSearchParams(hm ? hm[1] : location.search);
+  let raw = q.get("add"), from = (q.get("from") || "").toLowerCase();
+  // The protocol is Pro only: a Free user's incoming list waits here and loads the moment they go Pro.
+  if (raw == null) { const pa = isPro() && store.get("pf_pending_add", null); if (!pa) return; raw = pa.raw; from = pa.from || ""; store.set("pf_pending_add", null); }
+  else if (!isPro()) { store.set("pf_pending_add", { raw, from }); history.replaceState(null, "", "/list"); return; }
   const items = []; raw.split(";").slice(0, 40).forEach(t => { const m = t.match(/^(.*?)\s*\*\s*(\d{1,3})\s*$/), qty = m ? Math.max(1, Math.min(99, +m[2])) : 1; const f = parseList(m ? m[1] : t)[0]; if (f) { const x = items.find(i => i.pep === f.pep && i.size === f.size); x ? x.qty += qty : items.push({ ...f, qty }); } });
   history.replaceState(null, "", "/list");
   if (!items.length) { toast("We couldn't match anything in that list"); return; }
@@ -1697,7 +1712,8 @@ document.addEventListener("click", async e => {
   if (t.closest("[data-markread]")) { store.set("pf_seen_alerts", Date.now()); openedAt = Date.now(); closeDD(); route(true); return; }
   const af = t.closest("[data-afilt]"); if (af) { afilt = af.dataset.afilt; route(true); return; }
   const as = t.closest("[data-aseg]"); if (as) { go("#" + as.dataset.aseg); return; }
-  // protocol
+  // protocol (Pro only)
+  if (!isPro() && t.closest("[data-imp],[data-pastego],[data-addlist],[data-checklist],[data-chkgo],[data-strat],[data-swaps]")) { e.preventDefault(); e.stopPropagation(); upgradeSheet("protocol"); return; }
   const im = t.closest("[data-imp]"); if (im) { if (im.tagName === "A") { if (im.dataset.imp === "paste") setTimeout(pasteSheet, 50); else setTimeout(() => $("#pdfIn")?.click(), 120); return; } e.preventDefault(); pasteSheet(); return; }
   if (t.closest("[data-pastego]")) { const f = parseList($("#pasteTxt").value); if (!f.length) { $("#pastePrev").textContent = "We didn't recognize any compounds. Check the spelling, one per line."; return; } const n = addItems(f); closeSheet(); if (HASH() !== "#list") go("#list"); else route(); toast(`Added ${n} item${n === 1 ? "" : "s"} to your list`); return; }
   const ai = t.closest("[data-additem]"); if (ai) { addSheet(ai.dataset.additem); return; }

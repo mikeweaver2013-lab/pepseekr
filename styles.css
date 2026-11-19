@@ -912,3 +912,7 @@ tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset
 #reviews>.bar{flex-wrap:wrap;row-gap:10px}
 #reviews>.bar>h3{flex:1 1 auto}
 #reviews>.bar>.row{flex-wrap:nowrap}
+
+/* locked protocol page: feature icons */
+.pfi{display:inline-flex;width:22px;height:22px;flex:none;color:var(--brand)}
+.pfi svg{width:22px;height:22px}
