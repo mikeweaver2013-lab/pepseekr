@@ -212,7 +212,7 @@ const lowRated = v => v.tier === "mixed" || (v.finnrick_pct != null && v.finnric
 // Stores where we can put the items in the cart for you (tested by hand; verify_first = after their age check)
 const I_CART = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11h11l2-8H6.2"/><circle cx="9" cy="19.5" r="1.4"/><circle cx="17" cy="19.5" r="1.4"/><path d="M10.5 10.5l1.8 1.8 3.4-3.6"/></svg>`;
 const fillsCart = v => !!v && ["fill", "bag_link", "verify_first"].includes(v.cart_mode) && (v._ids ??= ROWS.some(r => r.v === v.id && r.cartId));
-const cartPill = v => !fillsCart(v) ? "" : `<span class="pill p-cart" title="${v.cart_mode === "verify_first" ? "We can fill your cart here after you confirm your age on their site" : "We can put your items in this store's cart for you"}">${I_CART}<span class="cp-t">Fills cart</span></span>`;
+const cartPill = v => !fillsCart(v) ? "" : `<span class="pill p-cart" title="${v.cart_mode === "verify_first" ? "We can fill your cart here after you sign in or confirm your age on their site" : "We can put your items in this store's cart for you"}">${I_CART}<span class="cp-t">Fills cart</span></span>`;
 // Influencer ties: who owns or promotes the store, with the source we found it in
 const I_MIC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
 const tiePill = v => !v || !v.tie_text ? "" : `<span class="pill p-tie" title="${esc(v.tie_text)}">${I_MIC}<span class="cp-t">${v.tie_kind === "owner" ? "Creator-owned" : "Creator-promoted"}</span></span>`;
@@ -968,7 +968,7 @@ function boardSheet(vid) {
   const sub = items.reduce((a, i) => a + i.price, 0);
   BOARD = { vid, mode, auto, hand, step: 0, win: null, timer: null, paused: false, done: false, sub };
   const intro = mode === "bag_link" ? `We'll open ${esc(v.name)} with all ${auto.length} item${auto.length === 1 ? "" : "s"} already in your bag.` : mode === "fill" ? `We'll open ${esc(v.name)} in a new tab and add ${auto.length} item${auto.length === 1 ? "" : "s"} to your cart.${v.cart_note ? ` <span class="t3">${esc(v.cart_note)}.</span>` : ""}`
-    : mode === "verify_first" ? `${esc(v.name)} asks you to confirm your age or researcher status before anything can go in the cart. Open the store, confirm on their site, then come back here and tap <b>Fill my cart</b>.`
+    : mode === "verify_first" ? `${esc(v.name)} asks you to sign in or confirm your age before anything can go in the cart. Open the store, do that on their site, then come back here and tap <b>Fill my cart</b>.`
     : `${esc(v.name)} doesn't let us fill the cart for you yet. Each item opens on their site; add it there and check it off here.`;
   openSheet(`<div class="shd"><h2>${mode === "links" ? "Shop at" : "Boarding"} ${esc(v.name)}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
     <p class="t2" style="margin-top:4px">${intro}</p>
@@ -984,7 +984,7 @@ function boardBody() {
   const status = B.done ? `<b class="data">Your cart is ready at ${esc(v.name)}.</b> You should see ${n} item${n === 1 ? "" : "s"}, about ${money2(B.sub)} before shipping. Missing one? Tap <b>Add again</b> next to it.`
     : B.paused ? `Paused while you were away. Tap <b>Keep going</b> to add the rest.`
     : B.timer ? `Adding ${esc(B.auto[B.step]?.label || "")}… (${Math.min(B.step + 1, n)} of ${n}). Leave the ${esc(v.name)} tab open.`
-    : B.mode === "verify_first" && !B.opened ? `Step 1: open ${esc(v.name)} and confirm on their site.` : `Ready to add ${n} item${n === 1 ? "" : "s"}.`;
+    : B.mode === "verify_first" && !B.opened ? `Step 1: open ${esc(v.name)} and sign in or confirm your age there.` : `Ready to add ${n} item${n === 1 ? "" : "s"}.`;
   const btns = B.done ? `<a class="btn" href="${esc(v.url.replace(/\/$/, ""))}${B.mode === "bag_link" ? "/cart.html" : "/cart/"}" target="${esc("pk_" + B.vid)}">Open my cart ${I.ext}</a><button class="btn p" type="button" data-close>Done</button>`
     : B.paused ? `<button class="btn p" type="button" data-boardgo>Keep going</button>`
     : B.timer ? "" : B.mode === "verify_first" && !B.opened ? `<button class="btn p" type="button" data-boardopen>Open ${esc(v.name)} ${I.ext}</button>`
