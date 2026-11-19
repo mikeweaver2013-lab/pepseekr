@@ -156,9 +156,9 @@ function build(t, s, C) {
         <div class="prc-plan"><div class="prc-name">Free</div><div class="prc-amt"><b>$0</b></div><p class="prc-for">Compare prices and keep an eye on a few vials.</p>
           <ul class="prc-list"><li>Every price, deal and lab report</li><li>Build your protocol and price it</li><li>Watch 3 vials, with in-app and phone alerts</li><li>Weekly email with your best prices</li></ul>
           <a class="btn prc-cta" href="/peptides">Start comparing</a></div>
-        <div class="prc-plan pro"><div class="prc-name">Pro</div><div class="prc-amt"><b>$9.99</b><span>a month</span></div><p class="prc-for">Or $79 a year, which works out to $6.58 a month.</p>
+        <div class="prc-plan pro"><div class="prc-name">Pro</div><div class="prc-amt"><b>$6.99</b><span>a month</span></div><p class="prc-for">Or $49 a year, which works out to $4.08 a month.</p>
           <ul class="prc-list"><li>Everything in Free</li><li>Every route: fewest stops, best value, one seller</li><li>Size swaps and Fill my cart</li><li>Unlimited watchlist with email alerts</li><li>Lot numbers, labs and test dates on lab reports</li></ul>
-          <div class="prc-btns"><button class="btn p prc-cta" type="button" data-plan="year">Get Pro yearly · $79</button><button class="btn prc-cta" type="button" data-plan="month">Monthly · $9.99</button></div>
+          <div class="prc-btns"><button class="btn p prc-cta" type="button" data-plan="year">Get Pro yearly · $49</button><button class="btn prc-cta" type="button" data-plan="month">Monthly · $6.99</button></div>
           <p class="prc-fine">Cancel any time from your account.</p></div>
       </div>
       <h3 class="prc-sub">Compare plans</h3>
@@ -172,8 +172,8 @@ function build(t, s, C) {
     const ld = [crumbs([["PepSeekr", "/"], ["Pricing", "/pricing"]]),
       { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faqs.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) },
       { "@context": "https://schema.org", "@type": "Product", name: "PepSeekr Pro", description: "Every route to buy your peptide protocol, size swaps, Fill my cart, unlimited watchlist with email alerts.", brand: { "@type": "Brand", name: "PepSeekr" },
-        offers: [{ "@type": "Offer", price: "9.99", priceCurrency: "USD", url: SITE + "/pricing", name: "Monthly" }, { "@type": "Offer", price: "79.00", priceCurrency: "USD", url: SITE + "/pricing", name: "Yearly" }] }];
-    return { path: "/pricing", route: "doc", title: "Pricing: Free and Pro | PepSeekr", desc: "PepSeekr is free to compare peptide prices, deals and lab reports. Pro ($9.99 a month or $79 a year) adds every route to buy your protocol, Fill my cart, and email alerts on your watchlist.", body, ld };
+        offers: [{ "@type": "Offer", price: "6.99", priceCurrency: "USD", url: SITE + "/pricing", name: "Monthly" }, { "@type": "Offer", price: "49.00", priceCurrency: "USD", url: SITE + "/pricing", name: "Yearly" }] }];
+    return { path: "/pricing", route: "doc", title: "Pricing: Free and Pro | PepSeekr", desc: "PepSeekr is free to compare peptide prices, deals and lab reports. Pro ($6.99 a month or $49 a year) adds every route to buy your protocol, Fill my cart, and email alerts on your watchlist.", body, ld };
   }
   if (t === "sales") {
     const on = ROWS.filter(r => r.stock && r.sale && r.reg > r.price).map(r => ({ ...r, off: Math.round((1 - r.price / r.reg) * 100) })).filter(r => r.off >= 3).sort((a, b) => b.off - a.off);

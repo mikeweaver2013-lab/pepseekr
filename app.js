@@ -1303,8 +1303,8 @@ function upgradeSheet(reason) {
   openSheet(`<div class="shd"><h2>PepSeekr Pro</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
     <p class="t2" style="margin-top:4px">${esc(WHY[reason] || "Find the cheapest way to buy everything on your list.")}</p>
     <ul class="perks">${PRO_PERKS.map(([b, t]) => `<li>${I.check}<span><b>${esc(b)}</b> ${esc(t)}</span></li>`).join("")}</ul>
-    <div class="plans"><button class="plan" type="button" data-plan="year"><span class="pl">Yearly</span><b>$79</b><span class="hint">$6.58 a month · save 34%</span></button>
-    <button class="plan" type="button" data-plan="month"><span class="pl">Monthly</span><b>$9.99</b><span class="hint">Cancel anytime</span></button></div>
+    <div class="plans"><button class="plan" type="button" data-plan="year"><span class="pl">Yearly</span><b>$49</b><span class="hint">$4.08 a month · save 41%</span></button>
+    <button class="plan" type="button" data-plan="month"><span class="pl">Monthly</span><b>$6.99</b><span class="hint">Cancel anytime</span></button></div>
     <p class="hint" style="margin-top:10px;text-align:center"><a class="lnk" href="/pricing">Compare Free and Pro</a></p>
     <p class="hint" style="margin-top:12px">Billed by Stripe. Cancel from your account page in two taps. PepSeekr doesn't sell peptides or take a cut from sellers.</p>`, "PepSeekr Pro");
 }
@@ -1355,7 +1355,7 @@ function vAccount() {
   </div></div>`;
 }
 const proCard = () => `<div class="card glow" style="padding:20px"><b style="font-size:17px">PepSeekr Pro</b><ul class="perks">${PRO_PERKS.map(([b, t]) => `<li>${I.check}<span><b>${esc(b)}</b> ${esc(t)}</span></li>`).join("")}</ul>
-  <div class="plans"><button class="plan" type="button" data-plan="year"><span class="pl">Yearly</span><b>$79</b><span class="hint">save 34%</span></button><button class="plan" type="button" data-plan="month"><span class="pl">Monthly</span><b>$9.99</b><span class="hint">cancel anytime</span></button></div></div>`;
+  <div class="plans"><button class="plan" type="button" data-plan="year"><span class="pl">Yearly</span><b>$49</b><span class="hint">save 41%</span></button><button class="plan" type="button" data-plan="month"><span class="pl">Monthly</span><b>$6.99</b><span class="hint">cancel anytime</span></button></div></div>`;
 const acctBtn = (cls) => `<a class="${cls}" href="#account" aria-label="${SESS ? "Account" : "Sign in"}">${I_USER}${cls === "btn" ? `<span>${SESS ? (isPro() ? "Pro" : "Account") : "Sign in"}</span>` : ""}</a>`;
 
 /* events */
