@@ -1140,11 +1140,11 @@ function pushState() {
 }
 function pushCard(compact) {
   const st = pushState();
-  if (st === "on") return compact ? "" : `<div class="box"><h3>Alerts are on</h3><p class="hint">We'll notify you when anything on your list or watchlist goes on sale, drops 5% or more, or comes back in stock.</p><div class="row"><button class="btn" id="testPush" type="button">Send a test</button><button class="btn" id="pushOff" type="button">Turn off alerts</button></div></div>`;
+  if (st === "on") return compact ? "" : `<div class="box"><h3>Alerts are on</h3><p class="hint">We'll notify you when a vial on your watchlist drops by your % (15% unless you change it), comes back in stock, or its store runs a sale.</p><div class="row"><button class="btn" id="testPush" type="button">Send a test</button><button class="btn" id="pushOff" type="button">Turn off alerts</button></div></div>`;
   if (st === "needs-install") return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">On iPhone, alerts work once PepSeekr is on your home screen.</p><ol class="steps"><li>Tap <b>Share</b> in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Open it from your home screen and come back here</li></ol></div>`;
-  if (st === "denied") return `<div class="box"><h3>Notifications are off for PepSeekr</h3><p class="hint">Turn them on in your phone's Settings under Notifications, then reopen PepSeekr.</p></div>`;
+  if (st === "denied") return `<div class="box"><h3>Notifications are off for PepSeekr</h3><p class="hint">Turn them on in your phone or browser settings under Notifications, then reopen PepSeekr.</p></div>`;
   if (st === "unsupported") return compact ? "" : `<div class="box"><p class="hint">This browser can't get alerts. Use Safari on iPhone (from the home screen) or Chrome on Android.</p></div>`;
-  return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">We'll notify you when anything on your list or watchlist goes on sale, drops 5% or more, or comes back in stock.</p><button class="btn p" id="pushOn" type="button">Turn on alerts</button></div>`;
+  return `<div class="box"><h3>Get price-drop alerts</h3><p class="hint">We'll notify you when a vial on your watchlist drops by your % (15% unless you change it), comes back in stock, or its store runs a sale.</p><button class="btn p" id="pushOn" type="button">Turn on alerts</button></div>`;
 }
 const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 const ab64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -1159,7 +1159,7 @@ async function pushOn() {
 async function syncSub(sub) {
   sub = sub || await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (!sub) return;
   const k = sub.toJSON().keys || { p256dh: ab64(sub.getKey("p256dh")), auth: ab64(sub.getKey("auth")) };
-  await rpc("pf_subscribe", { p_endpoint: sub.endpoint, p_p256dh: k.p256dh, p_auth: k.auth, p_protocol: [...new Set([...Object.keys(WATCH).filter(k => WATCH[k].on).map(k => k.split("|")[0])])] });
+  await rpc("pf_subscribe", { p_endpoint: sub.endpoint, p_p256dh: k.p256dh, p_auth: k.auth, p_protocol: Object.keys(WATCH).filter(k => WATCH[k].on).map(k => k + "|" + wPct(k) + (WATCH[k].target ? "|" + WATCH[k].target : "")) });
 }
 async function pushOff() {
   try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) { await rpc("pf_unsubscribe", { p_endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
@@ -1294,6 +1294,7 @@ const PRO_PERKS = [
   ["Size swaps", "Two 5 mg vials when they beat one 10 mg, worked out for you"],
   ["Fill my cart", "We put your items in the store's cart so you just check out"],
   ["Unlimited watchlist", `Free watches up to ${FREE_WATCH} vials`],
+  ["Email alerts", "An email when a watched vial hits your drop %, not just the weekly summary"],
   ["Lab report details", "Lot numbers, lab names and test dates on every COA"]
 ];
 const WHY = { routes: "Compare every way to buy your list.", swaps: "Let us swap sizes when two small vials beat one big one.", cart: "Let us fill your cart at this store.", watch: `Free accounts watch up to ${FREE_WATCH} vials. Pro watches as many as you like.`, lot: "See lot numbers, labs and test dates.", one: "Buy everything from one seller." };
@@ -1324,7 +1325,17 @@ const I_LOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 function watchAllowed() { return isPro() || Object.values(WATCH).filter(w => w.on).length < FREE_WATCH; }
 
 /* account page */
+let EMP = null;
+async function loadEmailPrefs() {
+  const el = $("#emailPrefs"); if (!el || !SESS) return;
+  try { const { data } = await sbc().rpc("pk_email_get"); EMP = data || { alerts: true, digest: true }; } catch { EMP = EMP || { alerts: true, digest: true }; }
+  const pro = isPro(), sw = (k, t, s, on, lock) => `<button type="button" class="srow" role="switch" aria-checked="${on}" ${lock ? `data-upgrade="watch"` : `data-eml="${k}"`}><span><b style="font-weight:600">${lock ? I_LOCK : ""}${t}</b><small>${s}</small></span><span class="tog m"><i></i></span></button>`;
+  el.innerHTML = `<b>Email</b><p class="hint" style="margin-top:4px">Sent to ${esc(SESS.user.email)}. Every email has a one-click unsubscribe.</p>
+    ${sw("alerts", "Watchlist alerts", pro ? "When a watched vial hits your drop %, comes back in stock, or its store runs a sale. At most one email every 3 hours." : "Pro: an email the moment a watched vial hits your drop %.", pro && EMP.alerts, !pro)}
+    ${sw("digest", "Weekly summary", "Mondays: the best price on each vial you watch, plus the week's biggest sales.", !!EMP.digest, false)}`;
+}
 function vAccount() {
+  setTimeout(loadEmailPrefs, 0);
   const tag = `<div class="sec" style="margin-top:28px"><div><span class="kick"><span class="lbl">Account</span></span><h1 class="h1" style="margin-top:12px">${SESS ? "Your account" : "Sign in"}</h1></div></div>`;
   if (!window.supabase) return `<div class="wrap">${tag}<div class="card empty"><b>Sign-in didn't load</b><p>Check your connection and refresh the page.</p></div></div>`;
   if (!SESS) return `<div class="wrap">${tag}<div class="acct"><div class="card" style="padding:20px"><p class="t2">Sign in to keep your list, watchlist and filters on every device.</p><div id="authBox" style="margin-top:14px">${authForm()}</div></div>${proCard()}</div></div>`;
@@ -1338,6 +1349,7 @@ function vAccount() {
       ${ME?.status === "past_due" ? `<p class="warn">Your last payment didn't go through. Update your card to keep Pro.</p>` : ""}
       <div class="row" style="gap:10px;flex-wrap:wrap">${ME?.has_billing ? `<button class="btn" type="button" data-billing>Manage billing</button>` : ""}<button class="btn" type="button" data-signout>Sign out</button></div>
     </div>
+    <div class="card" style="padding:20px" id="emailPrefs"><b>Email</b><p class="hint" style="margin-top:4px">Loading your email settings…</p></div>
     ${pro ? `<div class="card" style="padding:20px"><b>Pro is on</b><ul class="perks">${PRO_PERKS.map(([b]) => `<li>${I.check}<span>${esc(b)}</span></li>`).join("")}</ul></div>` : proCard()}
   </div></div>`;
 }
@@ -1515,6 +1527,7 @@ function toggleWatch(p, s) {
   else if (!watchAllowed()) { upgradeSheet("watch"); return; }
   else { WATCH[k] = Object.assign({ target: null, drop: true, restock: true, sale: true }, w || {}, { on: true }); toast(`Watching ${short(p)} ${sizeTxt(s)}. We'll alert you on sales and drops.`); }
   saveW(); route(true);
+  if (WATCH[k]?.on && !store.get("pf_push_nudged", false) && ["off", "needs-install"].includes(pushState())) { store.set("pf_push_nudged", true); setTimeout(() => { $("#toast").style.display = "none"; } , 590); setTimeout(() => openSheet(`<div class="shd"><h2>Get told when it drops</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>${pushCard(false)}<p class="hint" style="margin-top:12px">${SESS ? "Email alerts are on your account page." : "Or sign in to get a weekly email with the best price on each vial you watch."}</p>`, "Alerts"), 600); }
 }
 let syncT = 0;
 function syncPush() { if (pushState() !== "on") return; clearTimeout(syncT); syncT = setTimeout(() => syncSub().catch(() => {}), 800); }
@@ -1639,6 +1652,7 @@ document.addEventListener("click", async e => {
   const tc = t.closest("[data-tgtclear]"); if (tc) { const k = tc.dataset.tgtclear; if (WATCH[k]) { WATCH[k].target = null; saveW(); } const i = $(`[data-tgt="${CSS.escape(k)}"]`); if (i) i.value = ""; tc.remove(); return; }
   if (t.closest("[data-settarget]")) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size, v = parseFloat($("#tgt").value); WATCH[k] = Object.assign({ drop: true, restock: true, sale: true }, WATCH[k] || {}, { on: true, target: isFinite(v) && v > 0 ? v : null }); saveW(); toast(isFinite(v) && v > 0 ? `We'll alert you when ${short(pv.dataset.pep)} ${sizeTxt(pv.dataset.size)} drops below ${money2(v)}` : "Watching for sales and drops"); route(true); return; }
   const wk = t.closest("[data-wk]"); if (wk) { const pv = $("[data-pep]"), k = pv.dataset.pep + "|" + pv.dataset.size; WATCH[k] = Object.assign({ target: null, on: true, drop: true, restock: true, sale: true }, WATCH[k] || {}); WATCH[k][wk.dataset.wk] = !(WATCH[k][wk.dataset.wk] !== false); wk.setAttribute("aria-checked", WATCH[k][wk.dataset.wk]); saveW(); return; }
+  const em = t.closest("[data-eml]"); if (em && EMP) { const k = em.dataset.eml; EMP[k] = !EMP[k]; em.setAttribute("aria-checked", EMP[k]); sbc().rpc("pk_email_set", { p_alerts: k === "alerts" ? EMP.alerts : null, p_digest: k === "digest" ? EMP.digest : null }).then(({ error }) => { if (error) { EMP[k] = !EMP[k]; em.setAttribute("aria-checked", EMP[k]); toast("Couldn't save that. Try again."); } else toast(EMP[k] ? "Turned on" : "Turned off"); }); return; }
   const wrm = t.closest("[data-wrm]"); if (wrm) { const k = wrm.dataset.wrm, [p, s] = k.split("|"); delete WATCH[k]; saveW(); route(true); toast(`Removed ${short(p)} ${sizeTxt(s)} from your watchlist`); return; }
   const aa = t.closest("[data-aall]"); if (aa) { store.set("pf_aall", aa.dataset.aall === "1"); route(true); return; }
   const np = t.closest("[data-npref]"); if (np) { const k = "pf_n_" + np.dataset.npref, v = !store.get(k, true); store.set(k, v); np.setAttribute("aria-checked", v); return; }
