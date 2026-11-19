@@ -167,7 +167,21 @@ function score() {
 const sizeTxt = s => (s || "").replace(/iu$/, " IU");
 const unitTxt = u => u === "iu" ? "IU" : u;
 const shipCost = (v, sub) => v.ship_flat == null ? 0 : (v.free_ship_over != null && sub >= +v.free_ship_over ? 0 : +v.ship_flat);
-const eff = r => r.price + (S.ship ? shipCost(V[r.v], r.price) : 0);
+/* ---------- store deals: "buy 1 get 2 free", "30% off at checkout" ----------
+   promo_rule on the store: { type: "bxgy", buy, get } or { type: "pct", off }. Prices on PepSeekr stay the store's list price;
+   comparisons, $/mg, "best value" and cart totals use what you'd actually pay with the deal. */
+const promoOf = v => { const p = v && v.promo_rule; return p && (p.type === "pct" || (p.type === "bxgy" && p.buy > 0 && p.get > 0)) ? p : null; };
+const setSize = p => p.buy + p.get;
+// vials you pay for to end up with at least q (taking the free ones when that's cheaper)
+const paidUnits = (vid, q) => { const p = promoOf(V[vid]); if (!p || p.type !== "bxgy") return q; const s = setSize(p); return Math.min(q - Math.floor(q / s) * p.get, Math.ceil(q / s) * p.buy); };
+const gotUnits = (vid, q) => { const p = promoOf(V[vid]); if (!p || p.type !== "bxgy") return q; const s = setSize(p), paid = paidUnits(vid, q); return Math.max(q, Math.floor(paid / p.buy) * s + (paid % p.buy)); };
+// price per vial with the deal (bxgy: when you take a full set)
+const dealUnit = r => { const p = promoOf(V[r.v]); if (!p) return r.price; return p.type === "pct" ? r.price * (1 - p.off / 100) : r.price * p.buy / setSize(p); };
+const dealNote = r => { const p = promoOf(V[r.v]); if (!p) return ""; return p.type === "pct" ? `${p.off}% off at checkout: ${money2(dealUnit(r))}` : `${setSize(p)} for ${money2(r.price * p.buy)}: ${money2(dealUnit(r))} a vial`; };
+const promoShort = v => { const p = promoOf(v); return !p ? "" : p.type === "pct" ? `${p.off}% off` : `Buy ${p.buy}, get ${p.get} free`; };
+// the pill that explains why a price is so low
+const dealTag = v => promoOf(v) ? `<span class="pill p-deal" title="${esc(promoOf(v).label || promoShort(v))}${v.promo_ends ? " · ends " + new Date(v.promo_ends).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}">${esc(promoShort(v))}</span>` : "";
+const eff = r => dealUnit(r) + (S.ship ? shipCost(V[r.v], r.price) : 0);
 const live = () => ROWS.filter(r => !HIDE.has(r.v));
 // "Hide low-rated stores": flagged stores, Finnrick results under 60%, or 5+ buyer reviews averaging under 3.5.
 // Stores with no ratings at all stay in: having no data isn't a strike.
@@ -210,7 +224,9 @@ const mktTxt = v => { const d = Math.round((v.priceIdx - 1) * 100); return d ===
 function shipText(v) { const b = []; if (v.ship_flat != null) b.push(money(+v.ship_flat) + " flat"); if (v.free_ship_over != null) b.push("free over " + money(+v.free_ship_over)); return b.join(", ") || "Shown at checkout"; }
 const poss = n => n + (/s$/i.test(n) ? "'" : "'s");
 const coaPctTxt = v => v.coaKnown ? v.coaPct + "%" : "n/a";
-const avatar = v => `<span class="av" aria-hidden="true">${esc(v.name[0])}</span>`;
+// store logos saved on our own server (site/logos/<id>.png); a letter tile when we don't have one
+const LOGOS = new Set(["aavant", "ascension", "atomik", "behemoth", "biolongevity", "biostrategix", "biotech", "certifiedpep", "core", "evolve", "ezpeptides", "gentleman", "gila", "glacier", "hvy", "ionpeptide", "ldaminos", "milehigh", "modernaminos", "newbiorx", "nura", "paramount", "patriot", "pepshop", "primepeptides", "puratek", "stl", "swisschems", "thepeptideshop"]);
+const avatar = v => LOGOS.has(v.id) ? `<span class="av lg" aria-hidden="true"><img src="/logos/${esc(v.id)}.png" alt="" loading="lazy" decoding="async"></span>` : `<span class="av" aria-hidden="true">${esc(v.name[0])}</span>`;
 const mdy = d => d ? new Date(d + "T12:00").toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "";
 // COA badge: COA ✓ (report on file), Outdated (report > 12 months old), Reused? (same report file at other sellers or for other compounds), No COA.
 // "Verified" is reserved for a batch match against a buyer's vial photo, which isn't collected yet.
@@ -357,13 +373,13 @@ function alertItem(a, since, compact) {
 }
 function dealsList(n) {
   const g = groupBy(vis(live().filter(r => V[r.v].rating >= 3.5))), out = [];
-  Object.entries(g).forEach(([p, sz]) => Object.entries(sz).forEach(([s, l]) => { if (l.length < 3) return; const b = bestPrice(l); if (!b) return; const pct = Math.round((1 - b.price / b.med) * 100); if (pct >= 8) out.push({ p, s, b, pct, n: l.length }); }));
+  Object.entries(g).forEach(([p, sz]) => Object.entries(sz).forEach(([s, l]) => { if (l.length < 3) return; const b = bestPrice(l); if (!b) return; const pct = Math.round((1 - dealUnit(b) / b.med) * 100); if (pct >= 8) out.push({ p, s, b, pct, n: l.length }); }));
   out.sort((a, b) => b.pct - a.pct); const seen = new Set(), res = [];
   for (const d of out) { if (seen.has(d.p)) continue; seen.add(d.p); res.push(d); if (res.length >= n) break; }
   return res;
 }
 function dealCard(d, glow) {
-  return `<a class="card deal ${glow ? "glow" : ""}" href="#p-${slugOf(d.p)}"><span class="vw">${vial(d.p, d.s, 82)}</span><span class="bd"><span class="row" style="justify-content:space-between"><span class="lbl">vs market average</span>${coaTag(d.b)}</span><div style="font-weight:600;margin-top:6px">${esc(short(d.p))} · ${esc(sizeTxt(d.s))}</div><div class="px">${money2(d.b.price)}<s>${money2(d.b.med)}</s></div><div class="ft"><span class="t2">${esc(V[d.b.v].name)}</span><span class="pct">−${d.pct}%</span></div></span></a>`;
+  return `<a class="card deal ${glow ? "glow" : ""}" href="#p-${slugOf(d.p)}"><span class="vw">${vial(d.p, d.s, 82)}</span><span class="bd"><span class="row" style="justify-content:space-between"><span class="lbl">vs market average</span>${coaTag(d.b)}</span><div style="font-weight:600;margin-top:6px">${esc(short(d.p))} · ${esc(sizeTxt(d.s))}</div><div class="px">${money2(dealUnit(d.b))}<s>${money2(d.b.med)}</s></div>${promoOf(V[d.b.v]) ? `<div style="margin-top:4px">${dealTag(V[d.b.v])}</div>` : ""}<div class="ft"><span class="t2">${esc(V[d.b.v].name)}</span><span class="pct">−${d.pct}%</span></div></span></a>`;
 }
 function vendorCard(v, glow) {
   return `<a class="card vcard ${glow ? "glow" : ""}" href="#v-${esc(v.id)}"><div class="hd">${ring(v.score)}<div style="min-width:0;flex:1"><div class="lbl">Rank #${v.rank}</div><div class="row" style="gap:8px;margin-top:2px"><span class="nm">${esc(v.name)}</span>${vBadge(v)}</div>${v.tie_text ? `<span class="vtie">${I_MIC}${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieWho(v))}</span>` : ""}<span class="mline monly">${repTxt(v)} · ${mktTxt(v)}</span></div><span class="monly t3" style="width:20px">${I.chev}</span></div>
@@ -465,17 +481,17 @@ function vProduct(slug) {
   // the store you came from stays in the table even if a filter would hide it
   if (FOCUS_V && !list.some(r => r.v === FOCUS_V)) { const fr = raw.find(r => r.v === FOCUS_V); if (fr) list.push(fr); }
   const b = bestPrice(list) || bestPrice(raw) || raw[0], nV = new Set(all.map(r => r.v)).size;
-  const pct = Math.round((1 - b.price / b.med) * 100), w = WATCH[p + "|" + size] || {};
+  const pct = Math.round((1 - dealUnit(b) / b.med) * 100), w = WATCH[p + "|" + size] || {};
   const rv = RV.recent.filter(r => r.pep === p), avg = rv.length ? rv.reduce((a, r) => a + r.stars, 0) / rv.length : 0;
   const multi = list.filter(r => r.stock).length > 1;
   return `<div class="wrap" data-pep="${esc(p)}" data-size="${esc(size)}">
     <div class="crumbs"><a href="#home">Index</a> / <a href="#catalog" data-cat="${esc(catOf(p))}">${esc(catOf(p))}</a> / ${esc(p)}</div>
     <div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
       <div class="card glow phead"><span class="vwell vw">${vial(p, size, 130)}</span><div style="min-width:0"><span class="lbl">${esc(catOf(p))}</span><h1>${esc(p)}</h1><div class="ln mono" style="font-size:13px">${nV} vendors · ${all.length} offers${b ? ` · best $/${unitTxt(b.unit)} at <a class="link" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">${esc(V[b.v].name)} ↗</a>` : ""}${rv.length ? ` · ★ ${avg.toFixed(1)} (${rv.length})` : ""}</div>
-        <div class="sizes donly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money2(lb.price) : "Out of stock"}</small><small>${g[s].length} offer${g[s].length === 1 ? "" : "s"}</small></button>`; }).join("")}</div></div>
-        <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price</span><b>${money2(b.price)}</b><span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs average" : "at average"}</span><div class="pacts">${b.stock ? `<a class="btn p lg" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy at ${esc(V[b.v].name)} ${I.ext}</a>` : `<span class="pill p-n">Out of stock everywhere</span>`}<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch"}</button><button class="btn sm" type="button" data-addlist="${esc(p)}|${esc(size)}">${PROT.some(i => i.pep === p && i.size === size) ? I.check + " On my list" : I.plus + " Add to list"}</button></div><span class="ruo" style="text-align:right">Research use only</span></div></div></div>
-      <div class="sizes monly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money(lb.price) : "out"}</small></button>`; }).join("")}</div>
-      ${b.v && V[b.v].promo_text ? `<div class="promo"><b><a href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener" style="text-decoration:underline">${esc(V[b.v].name)} ↗</a>: ${esc(V[b.v].promo_text)}</b><div class="hint" style="margin-top:2px">${esc((V[b.v].promo_detail || "").replace(/\.?$/, ". ").replace(/^\. $/, ""))}Prices shown are before this discount.</div></div>` : ""}
+        <div class="sizes donly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money2(dealUnit(lb)) : "Out of stock"}</small><small>${g[s].length} offer${g[s].length === 1 ? "" : "s"}</small></button>`; }).join("")}</div></div>
+        <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price${promoOf(V[b.v]) ? " with deal" : ""}</span><b>${money2(dealUnit(b))}</b>${promoOf(V[b.v]) ? `<span class="row" style="gap:6px;margin-top:4px">${dealTag(V[b.v])}<span class="hint">${esc(dealNote(b))}</span></span>` : ""}<span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs average" : "at average"}</span><div class="pacts">${b.stock ? `<a class="btn p lg" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy at ${esc(V[b.v].name)} ${I.ext}</a>` : `<span class="pill p-n">Out of stock everywhere</span>`}<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch"}</button><button class="btn sm" type="button" data-addlist="${esc(p)}|${esc(size)}">${PROT.some(i => i.pep === p && i.size === size) ? I.check + " On my list" : I.plus + " Add to list"}</button></div><span class="ruo" style="text-align:right">Research use only</span></div></div></div>
+      <div class="sizes monly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money(dealUnit(lb)) : "out"}</small></button>`; }).join("")}</div>
+      ${b.v && V[b.v].promo_text ? `<div class="promo"><b><a href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener" style="text-decoration:underline">${esc(V[b.v].name)} ↗</a>: ${esc(V[b.v].promo_text)}</b><div class="hint" style="margin-top:2px">${esc((V[b.v].promo_detail || "").replace(/\.?$/, ". ").replace(/^\. $/, ""))}${promoOf(V[b.v]) ? "The prices and $/mg below count this deal." : "Prices shown are before this discount."}</div></div>` : ""}
       <div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("rep", "Hide low-rated")}</span><span class="donly">${ck("fill", "Fills your cart")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>${(() => { const on = [["stock", "In stock only"], ["coa", "COA on file"], ["rep", "Hide low-rated"], ["fill", "Fills your cart"], ["ship", "Including shipping"]].filter(([k]) => S[k]);
         return on.length ? `<div class="fbar"><span class="lbl">Your filters</span>${on.map(([k, t]) => `<button class="chip sm" type="button" data-filt="${k}" aria-label="Turn off ${t}">${t} <span aria-hidden="true">✕</span></button>`).join("")}<span class="t2" style="font-size:13px">${list.length < raw.length ? `Showing ${list.length} of ${raw.length} offers.` : `All ${raw.length} offers shown.`}</span>${list.length < raw.length ? `<button class="link" type="button" data-showall>Show all</button>` : ""}</div>` : ""; })()}
         ${list.length ? `<table class="tbl offers"><thead><tr><th>Vendor</th><th>Price</th><th>$/${unitTxt(b.unit)}</th><th>COA</th><th>Rating</th><th>Shipping</th><th></th></tr></thead><tbody>${list.map(r => offerRow(r, multi && r === b)).join("")}</tbody></table>
@@ -493,14 +509,14 @@ function vProduct(slug) {
 function hist(rv) { const d = [5, 4, 3, 2, 1].map(s => rv.filter(r => r.stars === s).length), t = rv.length || 1; return `<div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(d[i] / t * 100)}%"></b></i><span>${d[i]}</span></div>`).join("")}</div>`; }
 function offerRow(r, best) {
   const v = V[r.v];
-  return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"} ${FOCUS_V === r.v ? "focus" : ""}" data-ov="${esc(r.v)}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
-    <td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.sale ? ` <span class="pill p-sale">Sale</span>` : ""}${S.ship && shipCost(v, r.price) ? `<div class="hint">${money2(eff(r))} shipped</div>` : ""}</td>
-    <td class="mono">${money2(eff(r) / r.sv)}</td><td>${coaB(r, true) || `<span class="t3" title="Not checked yet">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}${v.finnrick_pct != null ? `<div><a class="link" href="${esc(frUrl(v))}" target="_blank" rel="noopener" title="${esc(frTitle(v))}" style="font-size:12.5px">Lab-tested ${v.finnrick_pct}% ↗</a></div>` : ""}${v.site_reviews_url ? `<div>${theirRev(v)}</div>` : ""}</td><td class="wrap-c">${esc(shipText(v))}</td>
+  return `<tr class="${best ? "best" : ""} ${r.stock ? "" : "oos"} ${FOCUS_V === r.v ? "focus" : ""}" data-ov="${esc(r.v)}"><td><a class="vn" href="#v-${esc(v.id)}">${avatar(v)}<span><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${dealTag(v)}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span></a></td>
+    <td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.sale ? ` <span class="pill p-sale">Sale</span>` : ""}${promoOf(v) ? `<div class="dealnote">${esc(dealNote(r))}</div>` : ""}${S.ship && shipCost(v, r.price) ? `<div class="hint">${money2(eff(r))} shipped</div>` : ""}</td>
+    <td class="mono">${money2(eff(r) / r.sv)}${promoOf(v) ? `<div class="hint">with deal</div>` : ""}</td><td>${coaB(r, true) || `<span class="t3" title="Not checked yet">—</span>`}</td><td class="mono" style="font-size:13px">${repTxt(v)}${v.finnrick_pct != null ? `<div><a class="link" href="${esc(frUrl(v))}" target="_blank" rel="noopener" title="${esc(frTitle(v))}" style="font-size:12.5px">Lab-tested ${v.finnrick_pct}% ↗</a></div>` : ""}${v.site_reviews_url ? `<div>${theirRev(v)}</div>` : ""}</td><td class="wrap-c">${esc(shipText(v))}</td>
     <td style="text-align:right"><a class="btn sm ${best ? "p" : ""}" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${r.stock ? "Buy" : "View"} ${I.ext}</a></td></tr>`;
 }
 function offerCard(r, best) {
   const v = V[r.v];
-  return `<li class="card ocard ${best ? "glow" : ""} ${FOCUS_V === r.v ? "focus" : ""}" data-ov="${esc(r.v)}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}</span></span></a>
+  return `<li class="card ocard ${best ? "glow" : ""} ${FOCUS_V === r.v ? "focus" : ""}" data-ov="${esc(r.v)}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${dealTag(v)}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}${promoOf(v) ? " with deal" : ""}</span></span></a>${promoOf(v) ? `<div class="dealnote" style="padding:0 14px 10px">${esc(dealNote(r))}</div>` : ""}
     <div class="bt"><span>${I.truck.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}${esc(shipText(v))}</span><span class="row" style="gap:8px">${r.sale && r.reg ? `<s class="mono">${money2(r.reg)}</s>` : ""}${coaB(r)}<span class="mono">${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : ""}</span></span></div></li>`;
 }
 const HCACHE = {};
@@ -526,7 +542,8 @@ let vrf = "recent";
 function vVendor(id) {
   const v = V[id]; if (!v) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>This vendor isn't listed right now</b><a class="btn" href="#vendors">All vendors</a></div></div>`;
   const rows = ROWS.filter(r => r.v === id), g = groupBy(rows);
-  const listings = Object.entries(g).map(([p, sz]) => Object.values(sz).map(l => l[0])).flat().sort((a, b) => a.vsMed - b.vsMed);
+  const allL = Object.entries(g).map(([p, sz]) => Object.values(sz).map(l => l[0])).flat().sort((a, b) => (b.stock - a.stock) || a.vsMed * dealUnit(a) / a.price - b.vsMed * dealUnit(b) / b.price);
+  const soldOut = allL.filter(r => !r.stock).length, listings = S.stock ? allL.filter(r => r.stock) : allL;
   let rv = RV.recent.filter(r => r.v === id);
   const st = RV.stats[id], dist = st?.dist || [0, 0, 0, 0, 0], tot = dist.reduce((a, b) => a + b, 0) || 1;
   if (vrf === "5") rv = rv.filter(r => r.stars === 5); if (vrf === "ship") rv = rv.filter(r => (r.tags || []).some(t => /ship/i.test(t))); if (vrf === "coa") rv = rv.filter(r => (r.tags || []).includes("Matches lab report"));
@@ -538,10 +555,11 @@ function vVendor(id) {
       <div class="kstats"><div><b>${v.rvN || 0}</b><span class="lbl">Verified reviews</span></div><div><b>${v.rvN ? v.rvAvg.toFixed(1) : v.finnrick_pct != null ? v.finnrick_pct + "%" : "—"}</b><span class="lbl">${v.rvN ? "Avg rating" : "Finnrick tests"}</span></div><div><b>${coaPctTxt(v)}</b><span class="lbl">COA on file</span></div><div><b>${ALERTS.filter(a => a.v === id && a.kind === "restock").length}</b><span class="lbl">Restocks · 7d</span></div></div></div>
     <div class="row" style="gap:16px">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length}</div><div class="row vact" style="margin-top:8px"><button class="btn ${following ? "" : "p"}" type="button" data-follow="${esc(id)}" aria-pressed="${following}">${I.bell} ${following ? "Following sales" : "Alert me on sales"}</button><a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener">Visit store ${I.ext}</a></div></div></div></div></section>
   <div class="wrap"><div class="dgrid"><div style="display:grid;gap:16px;min-width:0">
-    ${v.promo_text ? `<div class="promo" style="margin:0"><b>${esc(v.promo_text)}</b><div class="hint" style="margin-top:2px">${esc(v.promo_detail || "")}${v.promo_ends ? " Ends " + new Date(v.promo_ends).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + "." : ""} Prices on PepSeekr are before this discount.</div></div>` : ""}
+    ${v.promo_text ? `<div class="promo" style="margin:0"><b>${esc(v.promo_text)}</b><div class="hint" style="margin-top:2px">${esc(v.promo_detail || "")}${v.promo_ends ? " Ends " + new Date(v.promo_ends).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + "." : ""}${promoOf(v) ? (promoOf(v).type === "bxgy" ? ` Prices below are the store's list price; $/mg, rankings and cart totals count the free vials (${promoOf(v).buy} paid + ${promoOf(v).get} free).` : " $/mg, rankings and cart totals include the discount.") : " Prices on PepSeekr are before this discount."}</div></div>` : ""}
     <div class="card"><div class="phd"><div><span class="lbl">Listings</span><h3 style="font-size:17px;margin-top:4px">Best prices at ${esc(v.name)}</h3></div><span class="mono t3" style="font-size:12px">sorted by vs average</span></div>
-      <table class="tbl offers"><thead><tr><th>Peptide</th><th>Price</th><th>$/mg</th><th>vs average</th><th>COA</th><th></th><th></th></tr></thead><tbody>${listings.slice(0, 40).map(r => { const d = Math.round((r.vsMed - 1) * 100); return `<tr class="${r.stock ? "" : "oos"}"><td><a href="${pHref(r.pep, r.size, r.v)}"><b>${esc(r.pep)}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></a></td><td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}</td><td class="mono">${money2(r.ppu)}</td><td class="mono ${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td><a class="btn sm" href="${esc(r.url || v.url)}" target="_blank" rel="noopener" aria-label="Buy ${esc(r.pep)} ${esc(sizeTxt(r.size))} at ${esc(v.name)}">Buy ${I.ext || "↗"}</a></td><td><button class="watch" style="position:static" type="button" data-watch="${esc(r.pep)}" data-size="${esc(r.size)}" aria-pressed="${isW(r.pep, r.size)}" aria-label="Watch ${esc(r.pep)} ${esc(r.size)}">${I.star}</button></td></tr>`; }).join("")}</tbody></table>
-      <ul class="ocards monly" style="padding:12px">${listings.slice(0, 20).map(r => `<li class="card ocard"><a class="t" href="${pHref(r.pep, r.size, r.v)}"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))}</b><span class="hint" style="display:block">${esc(sizeTxt(r.size))}</span></span><span class="px"><b>${money2(r.price)}</b><span class="${r.vsMed < 1 ? "data" : ""}">${r.vsMed < 1 ? "−" + Math.round((1 - r.vsMed) * 100) + "% vs avg" : money2(r.ppu) + "/mg"}</span></span></a><a class="btn sm vbuy" href="${esc(r.url || v.url)}" target="_blank" rel="noopener" aria-label="Buy ${esc(r.pep)} ${esc(sizeTxt(r.size))} at ${esc(v.name)}">Buy ${I.ext || "↗"}</a></li>`).join("")}</ul></div>
+      <div class="row" style="gap:10px;padding:0 18px 12px;flex-wrap:wrap">${ck("stock", "In stock only")}<span class="hint">${S.stock ? (soldOut ? `${soldOut} sold-out listing${soldOut === 1 ? "" : "s"} hidden` : "Everything here is in stock") : (soldOut ? `${soldOut} sold out, marked below` : "Everything here is in stock")}</span></div>
+      <table class="tbl offers"><thead><tr><th>Peptide</th><th>Price</th><th>$/mg</th><th>vs average</th><th>COA</th><th></th><th></th></tr></thead><tbody>${listings.slice(0, 40).map(r => { const d = Math.round((r.vsMed * dealUnit(r) / r.price - 1) * 100); return `<tr class="${r.stock ? "" : "oos"}"><td><a href="${pHref(r.pep, r.size, r.v)}"><b>${esc(r.pep)}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span></a></td><td class="px">${r.sale && r.reg ? `<s>${money2(r.reg)}</s>` : ""}${money2(r.price)}${r.stock ? "" : ` <span class="pill p-n">Sold out</span>`}${promoOf(v) ? `<div class="dealnote">${esc(dealNote(r))}</div>` : ""}</td><td class="mono">${money2(eff(r) / r.sv)}</td><td class="mono ${d < 0 ? "data" : d > 2 ? "warn" : ""}">${d < 0 ? "▼ −" + -d : d > 0 ? "▲ +" + d : "0"}%</td><td>${coaB(r) || `<span class="t3">—</span>`}</td><td><a class="btn sm" href="${esc(r.url || v.url)}" target="_blank" rel="noopener" aria-label="Buy ${esc(r.pep)} ${esc(sizeTxt(r.size))} at ${esc(v.name)}">Buy ${I.ext || "↗"}</a></td><td><button class="watch" style="position:static" type="button" data-watch="${esc(r.pep)}" data-size="${esc(r.size)}" aria-pressed="${isW(r.pep, r.size)}" aria-label="Watch ${esc(r.pep)} ${esc(r.size)}">${I.star}</button></td></tr>`; }).join("")}</tbody></table>
+      <ul class="ocards monly" style="padding:12px">${listings.slice(0, 20).map(r => `<li class="card ocard"><a class="t" href="${pHref(r.pep, r.size, r.v)}"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))}</b><span class="hint" style="display:block">${esc(sizeTxt(r.size))}${r.stock ? "" : ` · <b class="warn">Sold out</b>`}</span></span><span class="px"><b>${money2(r.price)}</b><span class="${r.vsMed < 1 ? "data" : ""}">${r.vsMed < 1 ? "−" + Math.round((1 - r.vsMed) * 100) + "% vs avg" : money2(r.ppu) + "/mg"}</span></span></a><a class="btn sm vbuy" href="${esc(r.url || v.url)}" target="_blank" rel="noopener" aria-label="Buy ${esc(r.pep)} ${esc(sizeTxt(r.size))} at ${esc(v.name)}">Buy ${I.ext || "↗"}</a></li>`).join("")}</ul></div>
     <div class="card panel"><div class="bar"><h3>Verified buyer reviews</h3><button class="btn sm p" type="button" data-review="${esc(id)}">Review ${esc(v.name)}</button></div>
       <div class="row" style="margin:12px 0 4px;gap:8px">${[["recent", "Most recent"], ["5", "5★"], ["ship", "Shipping"], ["coa", "COA match"]].map(([k, t]) => `<button class="chip" type="button" data-vrf="${k}" aria-pressed="${vrf === k}">${t}</button>`).join("")}</div>
       ${v.rvN ? `<div class="row" style="gap:14px;margin-top:10px"><b class="mono" style="font-size:34px">${v.rvAvg.toFixed(1)}</b><div>${stars(v.rvAvg)}<div class="hint">${v.rvN} verified</div></div></div><div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(dist[i] / tot * 100)}%"></b></i><span>${dist[i]}</span></div>`).join("")}</div>` : ""}
@@ -609,10 +627,10 @@ function cartShip(v, sub) {
 }
 function priceStores(assign) { // assign: [{item, offer}]
   const stores = {};
-  assign.forEach(({ item, offer }) => { const s = (stores[offer.v] ??= { sub: 0, items: [] }); s.sub += offer.price * item.qty; s.items.push(item); });
+  assign.forEach(({ item, offer }) => { const s = (stores[offer.v] ??= { sub: 0, items: [] }); s.sub += lineCost(offer, item.qty); s.items.push(item); });
   let ship = 0, est = false;
   Object.entries(stores).forEach(([v, s]) => { const c = cartShip(V[v], s.sub); s.ship = c.amt; s.est = c.est; ship += c.amt; est = est || c.est; });
-  const sub = assign.reduce((a, x) => a + x.offer.price * x.item.qty, 0);
+  const sub = assign.reduce((a, x) => a + lineCost(x.offer, x.item.qty), 0);
   return { stores, sub, ship, est, total: sub + ship };
 }
 // ---------- routes: every way to buy the list, priced with shipping ----------
@@ -620,11 +638,18 @@ function priceStores(assign) { // assign: [{item, offer}]
 // Size swaps: if a store doesn't carry the exact vial, the same compound in a size that adds up to the
 // same total (e.g. 2 × 5mg for 10mg) counts, but only at stores without the exact size in stock.
 const unitOf = s => (s || "").replace(/^[\d.]+/, "");
+// what a line actually costs at checkout, with the store's deal
+function lineCost(o, qty) {
+  const p = promoOf(V[o.v]), units = (o.n || 1) * qty;
+  if (!p) return o.price * qty;
+  if (p.type === "pct") return o.price * qty * (1 - p.off / 100);
+  return paidUnits(o.v, units) * o.row.price;
+}
 function itemOffers(it, mode, swaps) {
   const need = parseFloat(it.size), unit = unitOf(it.size);
   const rows = live().filter(r => r.pep === it.pep && r.stock && r.unit === unit);
   const byV = {};
-  rows.filter(r => r.size === it.size).forEach(r => { if (!byV[r.v] || r.price < byV[r.v].price) byV[r.v] = { v: r.v, price: r.price, n: 1, row: r, med: r.med }; });
+  rows.filter(r => r.size === it.size).forEach(r => { if (!byV[r.v] || dealUnit(r) < dealUnit(byV[r.v].row)) byV[r.v] = { v: r.v, price: r.price, n: 1, row: r, med: r.med, cmp: dealUnit(r) }; });
   if (swaps) rows.forEach(r => {
     if (byV[r.v]?.n === 1 || r.size === it.size || !(r.sv > 0)) return;
     const n = need / r.sv;
@@ -637,7 +662,7 @@ function itemOffers(it, mode, swaps) {
     const ok = offers.filter(o => V[o.v].rating >= 3); if (ok.length) offers = ok;
     const c = offers.filter(o => o.row.coa === true && o.row.coaState !== "reused"); if (c.length) offers = c;
   }
-  return offers.sort((a, b) => a.price - b.price);
+  return offers.sort((a, b) => lineCost(a, it.qty || 1) - lineCost(b, it.qty || 1));
 }
 function* subsets(arr, k, start = 0, pre = []) { if (pre.length) yield pre; if (pre.length === k) return; for (let i = start; i < arr.length; i++) yield* subsets(arr, k, i + 1, [...pre, arr[i]]); }
 function buildRoutes(mode, swaps, maxStores) {
@@ -646,7 +671,7 @@ function buildRoutes(mode, swaps, maxStores) {
   // Keep the search fast as the store list grows: consider the 10 stores that carry the most of the list
   // (ties go to the one cheapest on those items), plus any store that is the cheapest for some item.
   const allV = [...new Set(buyable.flatMap(x => x.offers.map(o => o.v)))];
-  const rank = v => { const os = buyable.map(x => x.offers.find(o => o.v === v)).filter(Boolean); return [os.length, -os.reduce((a, o) => a + o.price, 0)]; };
+  const rank = v => { const os = buyable.map(x => x.offers.find(o => o.v === v)).filter(Boolean); return [os.length, -os.reduce((a, o) => a + lineCost(o, 1), 0)]; };
   const top = allV.sort((a, b) => { const [ca, pa] = rank(a), [cb, pb] = rank(b); return cb - ca || pb - pa; }).slice(0, 10);
   const vids = [...new Set([...top, ...buyable.map(x => x.offers[0].v)])];
   const seen = new Map();
@@ -826,7 +851,7 @@ function watchlist() {
   return `<div class="card wl"><div class="wr donly" style="padding-top:10px;padding-bottom:10px"><span class="lbl">Peptide</span><span class="lbl">Best now</span><span class="lbl tgc">Alert at</span><span class="lbl spk">30 days</span><span></span></div>${ks.map(k => {
     const [p, s] = k.split("|"), w = WATCH[k], b = bestPrice(live().filter(r => r.pep === p && r.size === s)), hit = w.target && b && b.price <= w.target;
     return `<div class="wr"><a href="${pHref(p, s)}" class="row" style="gap:10px;flex-wrap:nowrap;min-width:0"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(p, s, 42)}</span><span style="min-width:0"><b style="font-weight:600">${esc(short(p))}</b> <span class="mono t3">${esc(sizeTxt(s))}</span><span class="hint" style="display:block">${b ? esc(V[b.v].name) : "Out of stock"}</span></span></a>
-      <span class="mono"><b>${b ? money2(b.price) : "—"}</b>${hit ? ` <span class="pill p-brand">Hit</span>` : ""}</span>
+      <span class="mono"><b>${b ? money2(dealUnit(b)) : "—"}</b>${b && promoOf(V[b.v]) ? " " + dealTag(V[b.v]) : ""}${hit ? ` <span class="pill p-brand">Hit</span>` : ""}</span>
       <button type="button" class="chip sm pctchip tgc" data-pctopen="${esc(k)}" aria-label="Drop alert for ${esc(p)} ${esc(s)}: ${wPct(k)}%${w.target ? " or " + money2(w.target) : ""}. Change">↓${wPct(k)}%${w.target ? ` · ${money2(w.target)}` : ""}</button>
       <span class="spk" data-spark="${esc(k)}"></span>
       <button type="button" role="switch" aria-checked="${w.on}" data-won="${esc(k)}" aria-label="Alerts for ${esc(p)} ${esc(s)}" style="min-height:44px;display:grid;place-items:center"><span class="tog"><i></i></span></button></div>`; }).join("")}</div>`;
@@ -889,7 +914,7 @@ const addUrl = (v, id, q) => `${V[v].url.replace(/\/$/, "")}/?add-to-cart=${enco
 function legItems(r, vid) {
   return r.assign.filter(a => a.offer.v === vid).map(a => {
     const row = a.offer.row, q = a.offer.n * a.item.qty;
-    return { label: `${short(a.item.pep)} ${sizeTxt(a.item.size)}${a.offer.swap ? ` (${a.offer.n} × ${sizeTxt(row.size)})` : ""}${a.item.qty > 1 ? ` ×${a.item.qty}` : ""}`, qty: q, id: row.cartId, url: row.url || V[vid].url, price: a.offer.price * a.item.qty };
+    return { label: `${short(a.item.pep)} ${sizeTxt(a.item.size)}${a.offer.swap ? ` (${a.offer.n} × ${sizeTxt(row.size)})` : ""}${a.item.qty > 1 ? ` ×${a.item.qty}` : ""}${gotUnits(vid, q) > q ? ` + ${gotUnits(vid, q) - q} free` : ""}`, qty: q, id: row.cartId, url: row.url || V[vid].url, price: lineCost(a.offer, a.item.qty) };
   });
 }
 function cartBtn(vid) {
@@ -963,6 +988,8 @@ function vSales() {
   const list = cat ? on.filter(r => catOf(r.pep) === cat) : on;
   return `<div class="wrap">${sec("", "Sales", `${on.length} vials on sale right now`, `<span class="hint">Checked every 2 hours. "Was" is the store's own regular price.</span>`)}
     ${promos.length ? `<div class="card panel"><h3>Store-wide sales and codes</h3><div class="promos-l">${promos.map(v => `<a class="pr-row" href="#v-${esc(v.id)}">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="hint">${esc(v.promo_text)}</span></span>${I.chev}</a>`).join("")}</div></div>` : ""}
+    ${(() => { const dl = vis(live().filter(r => promoOf(V[r.v]) && r.med > 0)).map(r => Object.assign({}, r, { dOff: Math.round((1 - dealUnit(r) / r.med) * 100) })).filter(r => r.dOff >= 15).sort((a, b) => b.dOff - a.dOff).slice(0, 12);
+      return dl.length ? `<div class="card panel" style="margin-top:16px"><h3>Deals that cut the price per vial</h3><p class="hint" style="margin-top:2px">Counting the free vials. Compared with the middle price for the same vial.</p><div class="card sales" style="margin-top:10px;box-shadow:none">${dl.map(r => `<a class="salerow" href="${pHref(r.pep, r.size, r.v)}"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(r.pep, r.size, 42)}</span><span style="min-width:0"><b>${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span><span class="hint" style="display:block">${esc(V[r.v].name)} · ${esc(dealNote(r))}</span></span><span class="mono sp"><b>${money2(dealUnit(r))}</b><span class="hint" style="display:block">a vial</span></span>${dealTag(V[r.v])}</a>`).join("")}</div></div>` : ""; })()}
     <div class="row" style="gap:8px;margin:16px 0 10px;flex-wrap:wrap"><span class="lbl">Sort</span>${[["off", "Biggest % off"], ["price", "Lowest price"], ["mg", "Lowest $/mg"]].map(([k, t]) => `<button class="chip sm" type="button" data-salesort="${k}" aria-pressed="${sort === k}">${t}</button>`).join("")}</div>
     ${cats.length > 1 ? `<div class="hs row" style="gap:8px;flex-wrap:nowrap;margin-bottom:12px"><button class="chip sm" type="button" data-salecat="" aria-pressed="${!cat}">All</button>${cats.map(c => `<button class="chip sm" type="button" data-salecat="${esc(c)}" aria-pressed="${cat === c}">${esc(c)}</button>`).join("")}</div>` : ""}
     ${list.length ? `<div class="card sales">${list.slice(0, 120).map(r => `<a class="salerow" href="${pHref(r.pep, r.size, r.v)}"><span class="vwell" style="width:36px;height:46px;flex:none">${vial(r.pep, r.size, 42)}</span><span style="min-width:0"><b>${esc(short(r.pep))}</b> <span class="mono t3">${esc(sizeTxt(r.size))}</span><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="mono sp"><s class="t3">${money2(r.reg)}</s> <b>${money2(r.price)}</b></span><span class="pill p-sale">${r.off}% off</span></a>`).join("")}</div>`
@@ -1489,7 +1516,7 @@ function suggest(q) {
   const el = $("#sugg"); if (!el) return; q = q.trim().toLowerCase();
   if (!q) { el.classList.remove("open"); return; }
   const ps = PEPS.filter(p => p.toLowerCase().includes(q) || short(p).toLowerCase().includes(q)).slice(0, 6), vs = Object.values(V).filter(v => v.name.toLowerCase().includes(q) || tieHit(v, q)).slice(0, 4);
-  el.innerHTML = ps.map(p => { const b = bestOf(live().filter(r => r.pep === p)); return `<a href="#p-${slugOf(p)}" role="option"><span class="vw">${vial(p, b?.size || "", 34)}</span><span>${esc(p)}<span class="hint" style="display:block">${esc(catOf(p))}</span></span><span class="r">${b ? "from " + money2(b.price) : ""}</span></a>`; }).join("") + vs.map(v => `<a href="#v-${esc(v.id)}" role="option"><span class="vw">${avatar(v)}</span><span>${esc(v.name)}<span class="hint" style="display:block">${tieHit(v, q) ? `${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieHit(v, q))}` : `Vendor · score ${v.score}`}</span></span></a>`).join("") || `<p class="hint" style="padding:10px">Nothing matches “${esc(q)}”.</p>`;
+  el.innerHTML = ps.map(p => { const b = bestOf(live().filter(r => r.pep === p)); return `<a href="#p-${slugOf(p)}" role="option"><span class="vw">${vial(p, b?.size || "", 34)}</span><span>${esc(p)}<span class="hint" style="display:block">${esc(catOf(p))}</span></span><span class="r">${b ? "from " + money2(dealUnit(b)) + (promoOf(V[b.v]) ? " with deal" : "") : ""}</span></a>`; }).join("") + vs.map(v => `<a href="#v-${esc(v.id)}" role="option"><span class="vw">${avatar(v)}</span><span>${esc(v.name)}<span class="hint" style="display:block">${tieHit(v, q) ? `${v.tie_kind === "owner" ? "Owned by" : "Promoted by"} ${esc(tieHit(v, q))}` : `Vendor · score ${v.score}`}</span></span></a>`).join("") || `<p class="hint" style="padding:10px">Nothing matches “${esc(q)}”.</p>`;
   el.classList.add("open"); sIdx = -1; el.parentElement.setAttribute("aria-expanded", "true");
 }
 function refreshGrid() {
@@ -1563,7 +1590,7 @@ let focusQ = false;
 function buyBar() {
   const pv = $("[data-pep]"); if (!pv) return;
   const p = pv.dataset.pep, s = pv.dataset.size, list = vis(live().filter(r => r.pep === p && r.size === s)), b = bestPrice(list) || bestPrice(live().filter(r => r.pep === p && r.size === s));
-  $("#mbuy").innerHTML = b ? `<button class="mib" type="button" data-watch="${esc(p)}" data-size="${esc(s)}" aria-pressed="${isW(p, s)}" aria-label="${isW(p, s) ? "Stop watching" : "Watch"}" style="color:${isW(p, s) ? "var(--brand)" : "inherit"}">${I.star}</button><div class="bp"><span class="lbl">Best price</span><b>${money2(b.price)}</b><span>${esc(V[b.v].name)}</span></div><a class="btn p" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy ${I.chev}</a>` : "";
+  $("#mbuy").innerHTML = b ? `<button class="mib" type="button" data-watch="${esc(p)}" data-size="${esc(s)}" aria-pressed="${isW(p, s)}" aria-label="${isW(p, s) ? "Stop watching" : "Watch"}" style="color:${isW(p, s) ? "var(--brand)" : "inherit"}">${I.star}</button><div class="bp"><span class="lbl">Best price${promoOf(V[b.v]) ? " with deal" : ""}</span><b>${money2(dealUnit(b))}</b><span>${esc(V[b.v].name)}</span></div><a class="btn p" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy ${I.chev}</a>` : "";
 }
 function closeDD() { $("#dd")?.classList.remove("open"); $("#bell")?.setAttribute("aria-expanded", "false"); }
 
