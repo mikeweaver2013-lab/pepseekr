@@ -97,6 +97,10 @@
       "destination": "/api/seo?t=doc&s=contact"
     },
     {
+      "source": "/pricing",
+      "destination": "/api/seo?t=pricing"
+    },
+    {
       "source": "/",
       "destination": "/api/seo?t=home"
     },

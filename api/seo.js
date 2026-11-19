@@ -58,7 +58,15 @@ const DOCS = {
     <h3>Prices</h3><p>Every 2 hours, around the clock, we read each store's public product listings: price, sizes, stock and any linked lab report. Each page shows when prices were last checked. If a store blocks automated reads or hides prices behind a login, we say so instead of guessing.</p>
     <h3>Price per mg and the cheapest cart</h3><p>Price per mg is the vial price divided by the amount in the vial. Your list adds each store's shipping rules so the total reflects what you'd actually pay.</p>
     <h3>Lab reports (COAs)</h3><p>We link the certificate a store publishes and flag reports that look reused across products or stores, or that are more than 12 months old. <b>PepSeekr does not test products.</b> Independent lab-test pass rates shown on store pages come from Finnrick's public results and link to the source.</p>
-    <h3>Store scores</h3><p>A store's score blends independent lab-test results, verified buyer reviews and how complete its listings are. Prices and trust signals are shown separately, so the cheapest store is never presented as the most trustworthy one, or the reverse.</p>
+    <h3 id="scores">Store scores</h3><p>Every store gets a score out of 100, worked out the same way for everyone, recalculated every time prices are checked. Each store page shows its own breakdown.</p>
+    <table class="seo-t"><thead><tr><th>Part</th><th>Points</th><th>How it's worked out</th></tr></thead><tbody>
+      <tr><td>Reputation</td><td>40</td><td>A 1 to 5 rating: 3 stars or lower earns 0 points, 5 stars earns all 40. It starts from the store's independent lab-test pass rate on Finnrick, and verified PepSeekr buyer reviews pull it up or down as they come in. Stores Finnrick hasn't tested start at the middle of the tested stores, so not being tested is never a penalty by itself.</td></tr>
+      <tr><td>Price</td><td>30</td><td>The store's typical vial price compared with the middle price for the same vial everywhere else, counting any running deal. At the middle price a store earns 15; 25% or more below the middle earns all 30; 25% or more above earns 0.</td></tr>
+      <tr><td>Lab reports</td><td>20</td><td>The share of the store's product pages with a current certificate of analysis. Reports more than 12 months old count half, and reports that look reused across products or stores count nothing. If a store blocks our checker, this part sits at 10.</td></tr>
+      <tr><td>Shipping</td><td>10</td><td>Free shipping from $150 or less earns 10, from $250 or less earns 8, a higher threshold earns 6, and no free shipping or shipping shown only at checkout earns 5.</td></tr>
+    </tbody></table>
+    <p><b>Why no store is above about 80 yet:</b> reputation is the biggest part, and a 4-star rating earns 20 of its 40 points. Right now most stores sit near 4 stars because verified buyer reviews are only just starting. A store has to earn the top of that range through strong lab results and buyers who confirm it, so the high scores are still open.</p>
+    <p>Prices and trust are shown separately too, so the cheapest store is never presented as the most trustworthy one, or the reverse.</p>
     <h3>Creator ties</h3><p>Where a store is owned by, or promoted by, a creator or podcaster, we say so on the store page with the date we checked and a link to the source. If a tie is wrong or out of date, <a href="/contact?topic=correction">tell us</a> and we'll review it.</p>
     <h3>Money</h3><p>PepSeekr doesn't sell peptides, doesn't take a cut from stores and doesn't accept payment for placement. <b>Rankings are never for sale.</b> PepSeekr Pro is a paid subscription for extra features; it never changes prices, scores or order.</p>`],
   about: ["About PepSeekr", "PepSeekr is an independent price comparison for research peptides, updated every 2 hours.", `
@@ -107,6 +115,65 @@ function build(t, s, C) {
   if (t === "doc") {
     const d = DOCS[s]; if (!d) return null;
     return { path: "/" + s, route: "doc", title: `${d[0]} | PepSeekr`, desc: d[1], body: d[2], ld: [crumbs([["PepSeekr", "/"], [d[0], "/" + s]])] };
+  }
+  if (t === "pricing") {
+    const Y = "✓", N = "<span class=\"prc-no\">—</span>";
+    const rows = [
+      ["Compare prices", [
+        ["Prices, $/mg and stock from every store", Y, Y],
+        ["Deal math (Buy 1 Get 2, % off) counted in every price", Y, Y],
+        ["Sales page and store-wide deals", Y, Y],
+        ["Store scores, lab reports and creator ties", Y, Y],
+        ["Lab report details: lot number, lab and test date", N, Y]]],
+      ["Your protocol", [
+        ["Build it: check off, paste or drop a PDF", Y, Y],
+        ["Saved and synced across your devices", "Signed in", Y],
+        ["Cheapest way to buy it, shipping included", "Lowest price", "Every route"],
+        ["Fewest stops, best value and one-seller routes", N, Y],
+        ["Size swaps (two 5 mg when they beat one 10 mg)", N, Y],
+        ["Fill my cart at stores that allow it", N, Y]]],
+      ["Watchlist and alerts", [
+        ["Vials on your watchlist", "3", "Unlimited"],
+        ["Your own drop % per vial (15% to start)", Y, Y],
+        ["In-app alerts", Y, Y],
+        ["Home-screen alerts on your phone", Y, Y],
+        ["Weekly email: best price on each vial you watch, plus the week's sales", Y, Y],
+        ["Email when a watched vial hits your drop %", N, Y]]],
+    ];
+    const faqs = [
+      ["Does Pro change prices, scores or rankings?", "No. Every store is listed for free and none pay for placement. Pro adds tools for you; it never changes what a store pays, what you pay a store, or the order stores appear in."],
+      ["Do I need an account to use PepSeekr?", "No. Prices, deals, store pages and lab reports are open to everyone. A free account saves your protocol and watchlist across devices and adds the weekly email."],
+      ["How do watchlist alerts work?", "Star a vial and set how far it has to drop, 15% unless you change it. We check every store every 2 hours. Free watches 3 vials with in-app and home-screen alerts. Pro watches as many as you like and also emails you, at most once every 3 hours."],
+      ["What is Fill my cart?", "At stores that allow it, PepSeekr puts the items from your protocol into that store's own cart, so you land on their checkout with everything added. You still check out and pay on the store's site."],
+      ["How do I cancel?", "From your account page, any time. Pro stays on until the end of the period you paid for, then your account goes back to Free. Your protocol and your first 3 watched vials stay."],
+      ["How do I pay?", "By card through Stripe. PepSeekr never sees or stores your card number."],
+    ];
+    const body = `<div class="prc">
+      <nav class="seo-crumbs"><a href="/">PepSeekr</a> › Pricing</nav>
+      <h2 class="prc-h">Free to compare. Pro to buy smarter.</h2>
+      <p class="prc-lede">Every price, deal and lab report is free for everyone. Pro is for people who buy a full protocol: every way to buy it, carts filled for you, and an email the moment a vial you watch drops.</p>
+      <div class="prc-plans">
+        <div class="prc-plan"><div class="prc-name">Free</div><div class="prc-amt"><b>$0</b></div><p class="prc-for">Compare prices and keep an eye on a few vials.</p>
+          <ul class="prc-list"><li>Every price, deal and lab report</li><li>Build your protocol and price it</li><li>Watch 3 vials, with in-app and phone alerts</li><li>Weekly email with your best prices</li></ul>
+          <a class="btn prc-cta" href="/peptides">Start comparing</a></div>
+        <div class="prc-plan pro"><div class="prc-name">Pro</div><div class="prc-amt"><b>$9.99</b><span>a month</span></div><p class="prc-for">Or $79 a year, which works out to $6.58 a month.</p>
+          <ul class="prc-list"><li>Everything in Free</li><li>Every route: fewest stops, best value, one seller</li><li>Size swaps and Fill my cart</li><li>Unlimited watchlist with email alerts</li><li>Lot numbers, labs and test dates on lab reports</li></ul>
+          <div class="prc-btns"><button class="btn p prc-cta" type="button" data-plan="year">Get Pro yearly · $79</button><button class="btn prc-cta" type="button" data-plan="month">Monthly · $9.99</button></div>
+          <p class="prc-fine">Cancel any time from your account.</p></div>
+      </div>
+      <h3 class="prc-sub">Compare plans</h3>
+      <table class="prc-t"><thead><tr><th scope="col"><span class="sr">Feature</span></th><th scope="col">Free</th><th scope="col">Pro</th></tr></thead>
+        ${rows.map(([g, l]) => `<tbody><tr class="prc-g"><th scope="rowgroup" colspan="3">${esc(g)}</th></tr>${l.map(([f, a, b]) => `<tr><th scope="row">${esc(f)}</th><td>${a}</td><td>${b}</td></tr>`).join("")}</tbody>`).join("")}
+      </table>
+      <h3 class="prc-sub">Questions</h3>
+      <div class="seo-faq">${faqs.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("")}</div>
+      <p class="prc-fine" style="margin-top:18px">Prices in US dollars. PepSeekr doesn't sell peptides and takes no cut from stores. <a href="/method">How PepSeekr works</a></p>
+    </div>`;
+    const ld = [crumbs([["PepSeekr", "/"], ["Pricing", "/pricing"]]),
+      { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faqs.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) },
+      { "@context": "https://schema.org", "@type": "Product", name: "PepSeekr Pro", description: "Every route to buy your peptide protocol, size swaps, Fill my cart, unlimited watchlist with email alerts.", brand: { "@type": "Brand", name: "PepSeekr" },
+        offers: [{ "@type": "Offer", price: "9.99", priceCurrency: "USD", url: SITE + "/pricing", name: "Monthly" }, { "@type": "Offer", price: "79.00", priceCurrency: "USD", url: SITE + "/pricing", name: "Yearly" }] }];
+    return { path: "/pricing", route: "doc", title: "Pricing: Free and Pro | PepSeekr", desc: "PepSeekr is free to compare peptide prices, deals and lab reports. Pro ($9.99 a month or $79 a year) adds every route to buy your protocol, Fill my cart, and email alerts on your watchlist.", body, ld };
   }
   if (t === "sales") {
     const on = ROWS.filter(r => r.stock && r.sale && r.reg > r.price).map(r => ({ ...r, off: Math.round((1 - r.price / r.reg) * 100) })).filter(r => r.off >= 3).sort((a, b) => b.off - a.off);

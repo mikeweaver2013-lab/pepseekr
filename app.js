@@ -262,7 +262,7 @@ function HASH() {
   else if (p === "/peptides") r = "search";
   else if (p === "/influencers") r = "vendors";
   else if (p.startsWith("/influencers/")) r = seo && seo.startsWith("v-") ? seo : "vendors";
-  else if (/^\/(method|about|terms|privacy|contact)$/.test(p)) r = "doc";
+  else if (/^\/(method|about|terms|privacy|contact|pricing)$/.test(p)) r = "doc";
   else r = p.slice(1);
   return r === "home" ? "#home" : "#" + r + q;
 }
@@ -348,7 +348,7 @@ function chrome() {
     <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a>${acctBtn("mib")}</div>`;
   const tb = (hh, t, k, icn, extra = "") => `<a href="#${hh}" ${tab === k ? 'aria-current="page"' : ""}><i>${icn}</i>${t}${extra}</a>`;
   $("#tabbar").innerHTML = tb("home", "Index", "index", I.home) + tb("search", "Search", "search", I.search) + tb("list", "My list", "protocol", I.dl) + tb("alerts", "Alerts", "alerts", I.bell, cnt) + tb("watchlist", "Watchlist", "watchlist", I.star);
-  $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything or take a cut from sellers; confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="/sales">Sales today</a> · <a href="/method">How it works</a> · <a href="/about">About</a> · <a href="/contact">Contact</a> · <a href="/contact?topic=store">List or suggest a store</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
+  $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything or take a cut from sellers; confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="/sales">Sales today</a> · <a href="/method">How it works</a> · <a href="/pricing">Pricing</a> · <a href="/about">About</a> · <a href="/contact">Contact</a> · <a href="/contact?topic=store">List or suggest a store</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
 }
 function bellDD() {
   const list = ALERTS.filter(relevant).slice(0, 4), since = seenAlerts();
@@ -582,7 +582,7 @@ function vVendor(id) {
 function vVendors() {
   const all = Object.values(V).sort((a, b) => b.score - a.score), nTie = all.filter(v => v.tie_text).length;
   const vs = S.vtie ? all.filter(v => v.tie_text) : all;
-  return `<div class="wrap vhead"><div class="sec"><div><h2>Who to buy from</h2><p class="t2" style="margin-top:4px">Score: reviews 40, price 30, lab reports 20, shipping 10. Stores are listed free; none pay for rank. <a class="lnk" href="/method">How we score</a></p></div></div>
+  return `<div class="wrap vhead"><div class="sec"><div><h2>Who to buy from</h2><p class="t2" style="margin-top:4px">Score: reviews 40, price 30, lab reports 20, shipping 10. Stores are listed free; none pay for rank. <a class="lnk" href="/method#scores">How we score</a></p></div></div>
     <div class="row" style="gap:8px;margin-top:12px" role="radiogroup" aria-label="Show"><button class="chip" type="button" role="radio" data-vtie="" aria-checked="${!S.vtie}" aria-pressed="${!S.vtie}">All stores <span>${all.length}</span></button><button class="chip" type="button" role="radio" data-vtie="1" aria-checked="${!!S.vtie}" aria-pressed="${!!S.vtie}">${I_MIC}Creator-linked stores <span>${nTie}</span></button></div>
     ${S.vtie ? `<p class="hint" style="margin-top:8px">Stores owned by, or promoted by, a creator or podcaster. Each tie links to where we found it.</p>` : ""}
     <div class="g3c" style="margin-top:14px">${vs.map((v, i) => vendorCard(v, i === 0 && !S.vtie)).join("")}</div>
@@ -1305,6 +1305,7 @@ function upgradeSheet(reason) {
     <ul class="perks">${PRO_PERKS.map(([b, t]) => `<li>${I.check}<span><b>${esc(b)}</b> ${esc(t)}</span></li>`).join("")}</ul>
     <div class="plans"><button class="plan" type="button" data-plan="year"><span class="pl">Yearly</span><b>$79</b><span class="hint">$6.58 a month · save 34%</span></button>
     <button class="plan" type="button" data-plan="month"><span class="pl">Monthly</span><b>$9.99</b><span class="hint">Cancel anytime</span></button></div>
+    <p class="hint" style="margin-top:10px;text-align:center"><a class="lnk" href="/pricing">Compare Free and Pro</a></p>
     <p class="hint" style="margin-top:12px">Billed by Stripe. Cancel from your account page in two taps. PepSeekr doesn't sell peptides or take a cut from sellers.</p>`, "PepSeekr Pro");
 }
 async function billing(action, plan) {
@@ -1762,6 +1763,8 @@ document.addEventListener("click", e => {
   if (APP_ROUTES.test(href)) path = toPath(href);
   else if (href.startsWith("/") && !href.startsWith("//") && !/^\/(api|mock)\//.test(href) && !/\.[a-z0-9]{2,5}($|\?)/i.test(href)) path = href;
   if (path === null) return;
+  // written pages (how it works, pricing, terms...) come from the server, so load them normally
+  if (/^\/(method|about|terms|privacy|contact|pricing)(?=$|[?#])/.test(path)) return;
   e.preventDefault(); go(path);
 });
 // show real addresses on links (hover, copy, share), not "#p-..." routes
