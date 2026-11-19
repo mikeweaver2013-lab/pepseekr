@@ -1,0 +1,180 @@
+{
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    },
+    {
+      "source": "/(shell.html|app.js|styles.css|manifest.webmanifest)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/mock/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
+    },
+    {
+      "source": "/shell.html",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/(account|stats|list|protocol|alerts|watchlist|seller-log)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "pepseekr.vercel.app"
+        }
+      ],
+      "destination": "https://pepseekr.com/$1",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/sales",
+      "destination": "/api/seo?t=sales"
+    },
+    {
+      "source": "/llms.txt",
+      "destination": "/api/llms"
+    },
+    {
+      "source": "/method",
+      "destination": "/api/seo?t=doc&s=method"
+    },
+    {
+      "source": "/about",
+      "destination": "/api/seo?t=doc&s=about"
+    },
+    {
+      "source": "/terms",
+      "destination": "/api/seo?t=doc&s=terms"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/api/seo?t=doc&s=privacy"
+    },
+    {
+      "source": "/contact",
+      "destination": "/api/seo?t=doc&s=contact"
+    },
+    {
+      "source": "/pricing",
+      "destination": "/api/seo?t=pricing"
+    },
+    {
+      "source": "/",
+      "destination": "/api/seo?t=home"
+    },
+    {
+      "source": "/peptides",
+      "destination": "/api/seo?t=peps"
+    },
+    {
+      "source": "/peptides/:slug",
+      "destination": "/api/seo?t=p&s=:slug"
+    },
+    {
+      "source": "/vendors",
+      "destination": "/api/seo?t=vendors"
+    },
+    {
+      "source": "/compare/:slug",
+      "destination": "/api/seo?t=cmp&s=:slug"
+    },
+    {
+      "source": "/vendors/:id/reviews",
+      "destination": "/api/seo?t=v&s=:id&r=1"
+    },
+    {
+      "source": "/vendors/:id",
+      "destination": "/api/seo?t=v&s=:id"
+    },
+    {
+      "source": "/influencers",
+      "destination": "/api/seo?t=infs"
+    },
+    {
+      "source": "/influencers/:slug",
+      "destination": "/api/seo?t=i&s=:slug"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/search",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/list",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/protocol",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/alerts",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/watchlist",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/coa",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/account",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/stats",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/seller-log",
+      "destination": "/shell.html"
+    }
+  ]
+}

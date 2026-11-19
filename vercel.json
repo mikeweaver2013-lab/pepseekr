@@ -69,6 +69,10 @@
   ],
   "rewrites": [
     {
+      "source": "/bot",
+      "destination": "/api/seo?t=doc&s=bot"
+    },
+    {
       "source": "/sales",
       "destination": "/api/seo?t=sales"
     },
