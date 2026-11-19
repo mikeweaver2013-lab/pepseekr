@@ -1285,7 +1285,10 @@ async function pushOn() {
 async function syncSub(sub) {
   sub = sub || await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (!sub) return;
   const k = sub.toJSON().keys || { p256dh: ab64(sub.getKey("p256dh")), auth: ab64(sub.getKey("auth")) };
-  await rpc("pf_subscribe", { p_endpoint: sub.endpoint, p_p256dh: k.p256dh, p_auth: k.auth, p_protocol: Object.keys(WATCH).filter(k => WATCH[k].on).map(k => k + "|" + wPct(k) + (WATCH[k].target ? "|" + WATCH[k].target : "")) });
+  const args = { p_endpoint: sub.endpoint, p_p256dh: k.p256dh, p_auth: k.auth, p_protocol: Object.keys(WATCH).filter(k => WATCH[k].on).map(k => k + "|" + wPct(k) + (WATCH[k].target ? "|" + WATCH[k].target : "")) };
+  // signed in: send the account token so the server applies the right watch limit (Free 3, Pro unlimited)
+  if (typeof SESS !== "undefined" && SESS && typeof sbc === "function") { const { error } = await sbc().rpc("pf_subscribe", args); if (error) throw new Error(error.message); }
+  else await rpc("pf_subscribe", args);
 }
 async function pushOff() {
   try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) { await rpc("pf_unsubscribe", { p_endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
@@ -1303,10 +1306,10 @@ function sbc() {
   return SBC;
 }
 const signedIn = () => !!SESS;
-const isPro = () => !!(ME && ME.pro) || !!ownerKey();
+const isPro = () => !!(ME && ME.pro);
 async function refreshMe() {
   if (!SESS) { ME = null; store.set("pk_me", null); return; }
-  try { const { data, error } = await sbc().rpc("pk_me"); if (!error && data) { ME = data; store.set("pk_me", ME); } } catch {}
+  try { const was = !!(ME && ME.pro); const { data, error } = await sbc().rpc("pk_me"); if (!error && data) { ME = data; store.set("pk_me", ME); if (!!ME.pro !== was && typeof syncPush === "function") syncPush(); } } catch {}
 }
 
 /* sync: list, watchlist and filters follow the account */
@@ -1468,7 +1471,7 @@ function vAccount() {
   if (!window.supabase) return `<div class="wrap">${tag}<div class="card empty"><b>Sign-in didn't load</b><p>Check your connection and refresh the page.</p></div></div>`;
   if (!SESS) return `<div class="wrap">${tag}<div class="acct"><div class="card" style="padding:20px"><p class="t2">Sign in to keep your list, watchlist and filters on every device.</p><div id="authBox" style="margin-top:14px">${authForm()}</div></div>${proCard()}</div></div>`;
   const pro = isPro(), src = ME && ME.source, until = ME && ME.until ? mdy(String(ME.until).slice(0, 10)) : "";
-  const plan = pro ? (src === "owner" || (!ME?.pro && ownerKey()) ? "Pro (owner)" : ME?.status === "past_due" ? "Pro · payment due" : ME?.status === "canceled" || ME?.cancel ? `Pro until ${until}` : `Pro${until ? " · renews " + until : ""}`) : "Free";
+  const plan = pro ? (src === "owner" ? "Pro (owner)" : ME?.status === "past_due" ? "Pro · payment due" : ME?.status === "canceled" || ME?.cancel ? `Pro until ${until}` : `Pro${until ? " · renews " + until : ""}`) : "Free";
   return `<div class="wrap">${tag}<div class="acct">
     <div class="card" style="padding:20px;display:grid;gap:14px">
       <div class="r2"><span class="t3">Signed in as</span><b>${esc(SESS.user.email)}</b></div>
