@@ -641,13 +641,18 @@ async function loadLog() {
 /* ---------- COA library ---------- */
 let coaV = "";
 function vCoa() {
-  const rows = live().filter(r => r.coa === true && (!coaV || r.v === coaV)).sort((a, b) => a.pep.localeCompare(b.pep) || a.sv - b.sv);
+  // one box finds stores and peptides: every word has to match the peptide or the store name ("glacier bpc")
+  const words = (window.coaQ || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = r => { const h = (r.pep + " " + V[r.v].name).toLowerCase(), hs = h.replace(/[^a-z0-9]/g, ""); return words.every(w => h.includes(w) || hs.includes(w.replace(/[^a-z0-9]/g, ""))); };
+  const rows = live().filter(r => r.coa === true && (!coaV || r.v === coaV) && (!words.length || hit(r))).sort((a, b) => a.pep.localeCompare(b.pep) || a.sv - b.sv);
   const vs = vendors();
   return `<div class="wrap">${sec("", "COA library", "Lab reports, by vial", `${live().filter(r => r.coa === true).length} listings with a COA on file`)}
     <p class="t2" style="max-width:70ch;margin-top:-6px">Listings where the vendor links a certificate of analysis on the product page. Reports live on each vendor's site; check the lot matches what ships.</p>
-    <div class="hs row" style="margin:16px 0;flex-wrap:nowrap;overflow-x:auto"><button class="chip" type="button" data-coav="" aria-pressed="${!coaV}">All vendors</button>${vs.map(v => `<button class="chip" type="button" data-coav="${esc(v.id)}" aria-pressed="${coaV === v.id}">${esc(v.name)} <span class="mono t3">${coaPctTxt(v)}</span></button>`).join("")}</div>
+    <div class="coabar"><label class="coaf"><span class="lbl">Store</span><select class="authin" data-coasel aria-label="Filter by store"><option value="">All stores</option>${vs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(v => `<option value="${esc(v.id)}" ${coaV === v.id ? "selected" : ""}>${esc(v.name)} · ${esc(coaPctTxt(v))}</option>`).join("")}</select></label>
+      <label class="coaf"><span class="lbl">Search</span><input class="authin" type="search" data-coaq placeholder="Store or peptide, e.g. Glacier BPC" value="${esc(window.coaQ || "")}" aria-label="Search stores and peptides" autocomplete="off"></label>
+      <span class="mono t3 coan">${rows.length} report${rows.length === 1 ? "" : "s"}${coaV && V[coaV] && V[coaV].coaKnown ? ` · reports on ${V[coaV].coaPct}% of the ${V[coaV].coaChecked} ${esc(V[coaV].name)} pages we checked` : ""}</span></div>
     <div class="card">${rows.length ? `<table class="tbl offers"><thead><tr><th>Peptide</th><th>Size</th><th>Vendor</th><th>Price</th><th>COA</th></tr></thead><tbody>${rows.slice(0, 300).map(r => `<tr><td><a href="${pHref(r.pep, r.size, r.v)}"><b>${esc(r.pep)}</b></a></td><td class="mono">${esc(sizeTxt(r.size))}</td><td><a href="#v-${esc(r.v)}">${esc(V[r.v].name)}</a></td><td class="mono">${money2(r.price)}</td><td>${coaB(r, true)}</td></tr>`).join("")}</tbody></table>
-      <ul class="ocards monly" style="padding:12px">${rows.slice(0, 120).map(r => `<li class="card ocard"><a class="t" href="${esc(r.url || V[r.v].url)}" target="_blank" rel="noopener"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))} · ${esc(sizeTxt(r.size))}</b><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="coa">PDF ↗</span></a></li>`).join("")}</ul>` : `<div class="empty"><span class="ei">${I.file}</span><b>No lab reports linked for this vendor</b><p>Pick another vendor, or check their site directly.</p></div>`}</div></div>`;
+      <ul class="ocards monly" style="padding:12px">${rows.slice(0, 120).map(r => `<li class="card ocard"><a class="t" href="${esc(r.url || V[r.v].url)}" target="_blank" rel="noopener"><span class="vwell" style="width:40px;height:52px">${vial(r.pep, r.size, 48)}</span><span><b>${esc(short(r.pep))} · ${esc(sizeTxt(r.size))}</b><span class="hint" style="display:block">${esc(V[r.v].name)}</span></span><span class="coa">PDF ↗</span></a></li>`).join("")}</ul>` : `<div class="empty"><span class="ei">${I.file}</span><b>${words.length ? "No lab reports match your search" : "No lab reports linked for this store"}</b><p>${words.length ? "Check the spelling, or search just a store or just a peptide." : "Pick another store, or check their site directly."}</p>${words.length || coaV ? `<button class="btn" type="button" data-coaclear>Show all reports</button>` : ""}</div>`}</div></div>`;
 }
 // "30mg is cheaper per mg" line under a product's offer table
 function sizeHint(p, size, g) {
@@ -2039,6 +2044,7 @@ document.addEventListener("click", async e => {
   const sz = t.closest("[data-sz]"); if (sz) { curSize[$("[data-pep]").dataset.pep] = sz.dataset.sz; route(true); return; }
   const fo = t.closest("[data-follow]"); if (fo) { const id = fo.dataset.follow; FOLLOW.has(id) ? FOLLOW.delete(id) : FOLLOW.add(id); store.set("pf_follow", [...FOLLOW]); toast(FOLLOW.has(id) ? `You'll see ${V[id].name}'s sales in Alerts` : `Stopped following ${V[id].name}`); route(true); return; }
   const vr = t.closest("[data-vrf]"); if (vr) { vrf = vr.dataset.vrf; route(true); return; }
+  if (t.closest("[data-coaclear]")) { coaV = ""; window.coaQ = ""; route(true); return; }
   const cv = t.closest("[data-coav]"); if (cv) { coaV = cv.dataset.coav; route(true); return; }
   const po = t.closest("[data-pctopen]"); if (po) { const k = po.dataset.pctopen, [p, sz] = k.split("|"), w = WATCH[k] || {};
     openSheet(`<div class="shd"><h2>${esc(short(p))} ${esc(sizeTxt(sz))}</h2><button class="mib ib" style="border:0" type="button" data-close aria-label="Close">${I.x}</button></div>
@@ -2135,12 +2141,14 @@ document.addEventListener("click", async e => {
 document.addEventListener("change", async e => {
   const t = e.target;
   if (t.id === "vsel") { S.vendor = t.value; route(true); }
+  if (t.matches?.("[data-coasel]")) { coaV = t.value; route(true); }
   if (t.id === "sortSel") { S.sort = t.value; saveS(); refreshGrid(); }
   if (t.id === "pdfIn" && t.files[0]) importPdf(t.files[0]);
   if (t.dataset.tgt) { const v = parseFloat(t.value); WATCH[t.dataset.tgt].target = isFinite(v) && v > 0 ? v : null; saveW(); route(true); }
   if (t.id === "rwFile" && RW) { const f0 = t.files[0]; if (!f0) return; rwCapture(); RW.file = await shrink(f0); RW.preview = /^image\/(jpeg|png|webp|gif)$/.test(RW.file.type) ? URL.createObjectURL(RW.file) : ""; RW.err = ""; renderReview(); }
 });
 document.addEventListener("input", e => {
+  if (e.target.matches?.("[data-coaq]")) { window.coaQ = e.target.value; clearTimeout(window._coaT); window._coaT = setTimeout(() => { const pos = e.target.selectionStart; route(true); const n = $("[data-coaq]"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch {} } }, 200); }
   const t = e.target;
   if (t.id === "nq") { S.q = t.value; suggest(t.value); if ((HASH() || "#home") === "#home" || HASH() === "#search") refreshGrid(); }
   if (t.id === "mq") { S.q = t.value; if (HASH() !== "#search") { focusQ = true; go("#search"); } else refreshGrid(); }
