@@ -257,8 +257,8 @@ const mdy = d => d ? new Date(d + "T12:00").toLocaleDateString(undefined, { mont
 // "Verified" is reserved for a batch match against a buyer's vial photo, which isn't collected yet.
 const coaB = (r, full) => {
   if (r.coa === true && r.coaState === "reused") return `<a class="coa bad" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(r.coaShared > 1 ? "The same report file appears at " + r.coaShared + " sellers." : "The same report file is used for more than one compound.")} Treat as unverified.">⚠ Reused?</a>`;
-  if (r.coa === true && r.coaState === "outdated") return `<a class="coa old" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="Report dated ${esc(r.coaDate || "")}, more than 12 months ago">◷ Outdated${full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
-  if (r.coa === true) return `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.coaDate && "Report " + r.coaDate].filter(Boolean).join(" · "))}">COA ✓</a>`;
+  if (r.coa === true && r.coaState === "outdated") return `<a class="coa old" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" data-coap="${esc(r.url)}" title="Report dated ${esc(r.coaDate || "")}, more than 12 months ago">◷ Outdated${full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
+  if (r.coa === true) return `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" data-coap="${esc(r.url)}" aria-label="${esc(["Open the lab report", r.lab && "by " + r.lab, r.lot && "lot " + r.lot, r.coaDate && "dated " + mdy(r.coaDate)].filter(Boolean).join(", "))}">COA ✓</a>`;
   if (r.coa === false && r.coaState === "pending") return `<span class="pill p-warn" title="The store's product page says this report is pending">COA pending</span>`;
   if (r.coa === false) return `<span class="pill p-warn" title="We checked the product page and found no certificate of analysis">No COA</span>`;
   // the page points at the store's COA library or a COA button, but we couldn't find this product's own report: no tick until we can
@@ -2319,3 +2319,42 @@ function contactPrefill(n = 0) {
   if (t && [...f.kind.options].some(o => o.value === t)) f.kind.value = t;
   if (a && !f.subject.value) f.subject.value = (t === "correction" ? "Correction: " : "") + (V[a]?.name || a);
 }
+
+// Lab report preview: hover (or keyboard focus) on a COA badge shows a glimpse of the report; clicking still opens it.
+(() => {
+  if (!matchMedia("(hover:hover) and (pointer:fine)").matches) return; // touch: a tap just opens the report
+  let pop = null, timer = 0, cur = null;
+  const isImg = u => /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(u || "");
+  const isPdf = u => /\.pdf(\?|#|$)/i.test(u || "");
+  const hide = () => { clearTimeout(timer); cur = null; if (pop) pop.hidden = true; };
+  const place = a => {
+    const b = a.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, m = 10;
+    let x = Math.min(Math.max(m, b.left + b.width / 2 - w / 2), innerWidth - w - m);
+    let y = b.bottom + 8; if (y + h > innerHeight - m) y = Math.max(m, b.top - h - 8);
+    pop.style.left = x + "px"; pop.style.top = y + "px";
+  };
+  const show = a => {
+    const r = ROWS.find(x => x.url === a.dataset.coap); if (!r) return;
+    const u = r.coaUrl || r.url, v = V[r.v] || {};
+    if (!pop) { pop = document.createElement("div"); pop.className = "coapop"; pop.setAttribute("role", "tooltip"); pop.id = "coapop"; document.body.appendChild(pop); }
+    let pur = "";
+    if (isPro()) { const x = PUR && PUR[r.url]; if (x && x[0] != null) pur = `${+(+x[0]).toFixed(2)}%`; }
+    const facts = [["Lab", r.lab], ["Lot", r.lot], ["Tested", r.coaDate && mdy(r.coaDate)], ["Purity", pur || (isPro() ? "" : "Pro")]].filter(f => f[1]);
+    const kind = isImg(u) ? "" : `<div class="cpk">${I.file || ""}<span>${isPdf(u) ? "PDF report" : "Report on the store's site"}</span></div>`;
+    pop.innerHTML = `<div class="cph"><b>${esc(short(r.pep))} ${esc(sizeTxt(r.size))}</b><span>${esc(v.name || "")}</span></div>`
+      + (isImg(u) ? `<div class="cpi"><img src="${esc(u)}" alt="Lab report for ${esc(r.pep)}" referrerpolicy="no-referrer" decoding="async"></div>` : kind)
+      + (facts.length ? `<dl>${facts.map(f => `<div><dt>${f[0]}</dt><dd${f[1] === "Pro" ? ' class="lk"' : ""}>${esc(f[1])}</dd></div>`).join("")}</dl>` : "")
+      + (r.coaState === "outdated" ? `<p class="cpw">This report is more than 12 months old.</p>` : "")
+      + `<p class="cpf">Click to open the full report</p>`;
+    const img = pop.querySelector("img");
+    if (img) { img.onerror = () => { img.parentNode.outerHTML = `<div class="cpk">${I.file || ""}<span>Preview unavailable. Click to open it.</span></div>`; place(a); }; img.onload = () => cur === a && place(a); }
+    pop.hidden = false; place(a); a.setAttribute("aria-describedby", "coapop");
+  };
+  const arm = a => { if (cur === a) return; clearTimeout(timer); cur = a; timer = setTimeout(() => cur === a && show(a), 220); };
+  document.addEventListener("mouseover", e => { const a = e.target.closest && e.target.closest("a[data-coap]"); if (a) arm(a); else if (cur && !(pop && pop.contains(e.target))) hide(); });
+  document.addEventListener("focusin", e => { const a = e.target.closest && e.target.closest("a[data-coap]"); a ? arm(a) : hide(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") hide(); });
+  addEventListener("scroll", hide, { passive: true, capture: true });
+  document.addEventListener("click", hide, true);
+  addEventListener("hashchange", hide);
+})();
