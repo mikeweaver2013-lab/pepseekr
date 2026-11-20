@@ -258,7 +258,7 @@ const mdy = d => d ? new Date(d + "T12:00").toLocaleDateString(undefined, { mont
 const coaB = (r, full) => {
   if (r.coa === true && r.coaState === "reused") return `<a class="coa bad" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(r.coaShared > 1 ? "The same report file appears at " + r.coaShared + " sellers." : "The same report file is used for more than one compound.")} Treat as unverified.">⚠ Reused?</a>`;
   if (r.coa === true && r.coaState === "outdated") return `<a class="coa old" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="Report dated ${esc(r.coaDate || "")}, more than 12 months ago">◷ Outdated${full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
-  if (r.coa === true) return `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.coaDate && "Report " + r.coaDate].filter(Boolean).join(" · "))}">COA ✓${full && r.lot && isPro() ? " · Lot " + esc(r.lot) : full && r.coaDate ? " · " + esc(mdy(r.coaDate)) : ""}</a>`;
+  if (r.coa === true) return `<a class="coa" href="${esc(r.coaUrl || r.url)}" target="_blank" rel="noopener" title="${esc(["Certificate of analysis on the vendor's page", r.lot && "Lot " + r.lot, r.lab, r.coaDate && "Report " + r.coaDate].filter(Boolean).join(" · "))}">COA ✓</a>`;
   if (r.coa === false) return `<span class="pill p-warn" title="We checked the product page and found no certificate of analysis">No COA</span>`;
   return "";
 };
