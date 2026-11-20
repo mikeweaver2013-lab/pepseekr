@@ -1053,3 +1053,4 @@ tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset
 @media (max-width:760px){.coabar{grid-template-columns:1fr}.coan{justify-self:start;text-align:left;padding:0}}
 .salebar{grid-template-columns:minmax(0,320px) minmax(0,220px) 1fr}
 @media (max-width:760px){.salebar{grid-template-columns:1fr 1fr}.salebar .coan{grid-column:1/-1}}
+.coa.unc{color:var(--text-2);background:transparent;border-style:dashed;border-color:color-mix(in srgb,var(--text) 30%,transparent)}
