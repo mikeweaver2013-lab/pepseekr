@@ -61,6 +61,19 @@
           "value": "noindex"
         }
       ]
+    },
+    {
+      "source": "/cards/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=300, s-maxage=3600"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
     }
   ],
   "redirects": [
@@ -77,6 +90,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/cards/:file",
+      "destination": "https://vddteufnmnkqqndzepbk.supabase.co/storage/v1/object/public/cards/:file"
+    },
     {
       "source": "/bot",
       "destination": "/api/seo?t=doc&s=bot"
