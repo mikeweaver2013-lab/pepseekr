@@ -354,7 +354,11 @@ function barcode(seed) {
 /* ---------- chrome: band, nav, mobile bars, footer ---------- */
 const newest = () => Object.values(V).map(v => Date.parse(v.last_scraped_at) || 0).reduce((a, b) => Math.max(a, b), 0);
 const pulled = () => newest() ? "pulled " + ago(new Date(newest()).toISOString()) : "loading";
-const curTab = () => { let h = (HASH() || "#home").slice(1); if (h === "list") h = "protocol"; return h.startsWith("p-") ? "index" : h.startsWith("v-") || h.startsWith("s-") || h === "vendors" ? "vendors" : h === "coa" ? "coa" : h === "protocol" ? "protocol" : h === "alerts" ? "alerts" : h === "watchlist" ? "watchlist" : h === "search" ? "search" : "index"; };
+const curTab = () => { let h = (HASH() || "#home").slice(1).split("?")[0]; if (h === "list") h = "protocol";
+  if (h === "home" || h === "" || h === "catalog" || h.startsWith("p-")) return "index";
+  if (h.startsWith("v-") || h.startsWith("s-") || h.startsWith("c-") || h === "vendors" || h === "sellers" || h === "seller-log") return "vendors";
+  return ["sales", "coa", "protocol", "alerts", "watchlist", "search"].includes(h) ? h : "";   // pages with no tab of their own highlight nothing
+};
 function unread() { const since = seenAlerts(); return ALERTS.filter(a => Date.parse(a.at) > since && relevant(a)).length; }
 const relevant = a => a.kind === "promo" ? FOLLOW.has(a.v) || Object.keys(WATCH).some(k => WATCH[k].on && ROWS.some(r => r.v === a.v && r.pep + "|" + r.size === k)) : !!WATCH[a.pep + "|" + a.size]?.on && dropOk(a);
 const themeSel = () => document.documentElement.dataset.theme || "system";
