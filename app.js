@@ -99,7 +99,9 @@ const saveP = () => { store.set("pf_prefs_at", Date.now()); store.set("pf_proto2
 function ingest(d) {
   D = d; V = {};
   (d.vendors || []).forEach(v => { v.tier = PRIOR[v.rep_tier] ? v.rep_tier : "unrated"; V[v.id] = v; });
-  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: a[12] || null, lot: a[13] || null, lab: a[15] || null, tested: a[16] || null, coaState: a[17] || null, coaDate: a[18] || null, coaShared: a[19] || 0, cartId: a[20] || null }))
+  // some stores give report links as paths ("coa/x.jpg"): resolve them against the product page, never against pepseekr.com
+  const absU = (u, base) => { if (!u) return null; try { return new URL(u, base).href; } catch { return null; } };
+  ROWS = (d.products || []).map(a => ({ v: a[0], pep: a[1], size: a[2], sv: +a[3], unit: a[4], price: +a[5], reg: a[6] == null ? null : +a[6], sale: !!a[7], stock: !!a[8], coa: a[9], url: a[10], img: a[11] || null, coaUrl: absU(a[12], a[10]), lot: a[13] || null, lab: a[15] || null, tested: a[16] || null, coaState: a[17] || null, coaDate: a[18] || null, coaShared: a[19] || 0, cartId: a[20] || null }))
     .filter(r => V[r.v] && r.price > 0 && r.sv > 0);
   // Same compound spelled differently by different stores ("5 Amino 1MQ" / "5-Amino-1MQ", "ACE 031" / "ACE-031"):
   // fold onto one name, the spelling most stores use (ties go to the hyphenated one). Drop names with no letters.
