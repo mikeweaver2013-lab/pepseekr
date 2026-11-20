@@ -1568,10 +1568,16 @@ const TRK = (() => {
   const bot = navigator.webdriver || /bot|crawl|spider|slurp|headless|lighthouse|preview/i.test(navigator.userAgent);
   let sid = ""; try { sid = sessionStorage.getItem("pk_sid") || ""; if (!sid) { sid = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem("pk_sid", sid); } } catch { sid = "x" + Math.random().toString(36).slice(2); }
   const q = [], mobile = matchMedia("(max-width:760px)").matches;
+  // a random id kept in this browser (no cookie, nothing personal) so returning visitors can be counted
+  let vid = "", ret = false;
+  try { vid = localStorage.getItem("pk_vid") || ""; const fresh = !sessionStorage.getItem("pk_vs"); if (fresh) { ret = !!vid; sessionStorage.setItem("pk_vs", ret ? "r" : "n"); } else ret = sessionStorage.getItem("pk_vs") === "r";
+        if (!vid) { vid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("pk_vid", vid); } } catch {}
+  const coarse = matchMedia("(pointer:coarse)").matches, w = Math.min(screen.width || innerWidth, screen.height || innerHeight);
+  const dev = coarse ? (w >= 700 ? "tablet" : "phone") : "desktop";
   let t = 0;
   const flush = () => { clearTimeout(t); if (!q.length) return; const body = JSON.stringify({ p: q.splice(0, 20) });
     try { fetch(`${SB}/rest/v1/rpc/pk_track`, { method: "POST", keepalive: true, headers: { apikey: KEY, "Content-Type": "application/json" }, body }).catch(() => {}); } catch {} };
-  const push = e => { if (bot || ownerKey()) return; q.push(Object.assign({ sid, mobile }, e)); clearTimeout(t); t = setTimeout(flush, e.kind === "out" ? 0 : 2500); };
+  const push = e => { if (bot || ownerKey() || location.pathname === "/stats" || (location.hash || "").startsWith("#stats")) return; q.push(Object.assign({ sid, mobile, vid, ret, dev }, e)); clearTimeout(t); t = setTimeout(flush, e.kind === "out" ? 0 : 2500); };
   addEventListener("pagehide", flush); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
   return { push, flush, sid };
 })();
@@ -1590,7 +1596,8 @@ function trackLand() {
   try { if (sessionStorage.getItem("pk_land")) return; sessionStorage.setItem("pk_land", "1"); } catch {}
   const u = new URL(location.href), g = k => u.searchParams.get(k) || "";
   let ref = ""; try { const r = document.referrer && new URL(document.referrer); if (r && r.hostname !== location.hostname) ref = r.hostname.replace(/^www\./, ""); } catch {}
-  TRK.push({ kind: "land", path: routePath(), ref, src: g("utm_source") || g("ref") || g("via"), med: g("utm_medium"), camp: g("utm_campaign") });
+  let tz = "", lang = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; lang = (navigator.language || "").slice(0, 16); } catch {}
+  TRK.push({ kind: "land", path: routePath(), ref, src: g("utm_source") || g("ref") || g("via"), med: g("utm_medium"), camp: g("utm_campaign"), tz, lang });
   // drop tracking params from the address bar once recorded, so shares stay clean
   if (["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "via", "fbclid", "gclid"].some(k => u.searchParams.has(k))) {
     ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "via", "fbclid", "gclid"].forEach(k => u.searchParams.delete(k));
@@ -1598,7 +1605,7 @@ function trackLand() {
   }
 }
 let srchT = 0;
-function trackSearch(v) { clearTimeout(srchT); v = (v || "").trim(); if (v.length < 3) return; srchT = setTimeout(() => TRK.push({ kind: "search", q: v, path: routePath() }), 1500); }
+function trackSearch(v) { clearTimeout(srchT); v = (v || "").trim(); if (v.length < 3) return; srchT = setTimeout(() => { const l = v.toLowerCase(); let n = 0; try { n = PEPS.filter(p => p.toLowerCase().includes(l) || short(p).toLowerCase().includes(l)).length + Object.values(V).filter(x => x.name.toLowerCase().includes(l)).length; } catch {} TRK.push({ kind: "search", q: v, n, path: routePath() }); }, 1500); }
 const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
 function vendorByUrl(u) { const h = hostOf(u); return h ? Object.values(V).find(v => hostOf(v.url) === h) : null; }
 function ctxOf(el) {
@@ -1625,39 +1632,199 @@ document.addEventListener("click", e => {
 document.addEventListener("auxclick", e => { const a = e.target.closest?.("a[href^='http']"); const v = a && vendorByUrl(a.href); if (v) { trackOut(v.id, null, null, ctxOf(a)); a.href = tagOut(affUrl(v.id, a.href), ctxOf(a)); } }, true);
 document.addEventListener("input", e => { if (e.target.id === "nq" || e.target.id === "mq") trackSearch(e.target.value); });
 
-/* ---------- owner report ---------- */
-let STATS = null, STATS_DAYS = 30;
-async function loadStats() {
-  try { const [st, ib] = await Promise.all([rpc("pk_stats", { p_key: ownerKey(), p_days: STATS_DAYS }), rpc("pk_owner_inbox", { p_key: ownerKey() }).catch(() => null)]); STATS = st; STATS.inbox = ib; } catch { STATS = { error: true }; }
-  if ((HASH() || "") === "#stats") route(true);
+/* ---------- owner analytics ---------- */
+let STATS = null, INBOX = null, STATS_RANGE = store.get("pk_srange", "7d"), STATS_TAB = store.get("pk_stab", "overview"), STATS_METRIC = "visitors", STATS_T = 0;
+const ST_RANGES = [["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["90d", "90 days"], ["all", "All time"]];
+const ST_TABS = [["overview", "Overview"], ["audience", "Audience"], ["content", "Content"], ["stores", "Stores"], ["revenue", "Pro & revenue"], ["live", "Live"], ["inbox", "Inbox"]];
+async function loadStats(quiet) {
+  try { const [st, ib] = await Promise.all([rpc("pk_stats2", { p_key: ownerKey(), p_range: STATS_RANGE }), rpc("pk_owner_inbox", { p_key: ownerKey() }).catch(() => null)]); STATS = st; INBOX = ib; } catch { if (!quiet) STATS = { error: true }; }
+  if ((HASH() || "") === "#stats") { const y = scrollY; route(true); if (quiet) scrollTo(0, y); }
 }
+// refresh every minute while the report is open and visible
+setInterval(() => { if ((HASH() || "") === "#stats" && STATS && !STATS.error && document.visibilityState === "visible" && !document.querySelector(".an input:focus")) loadStats(true); }, 60000);
+
+const SRC_NAMES = [[/googlequicksearchbox|(^|\.)google\./, "Google"], [/bing\.com/, "Bing"], [/duckduckgo/, "DuckDuckGo"], [/yahoo\./, "Yahoo"], [/reddit/, "Reddit"], [/^t\.co$|twitter|x\.com/, "X (Twitter)"],
+  [/facebook|fb\.|^m\.facebook/, "Facebook"], [/instagram/, "Instagram"], [/youtube|youtu\.be/, "YouTube"], [/tiktok/, "TikTok"], [/chatgpt|openai/, "ChatGPT"], [/perplexity/, "Perplexity"], [/claude\.ai/, "Claude"],
+  [/gemini\.google/, "Gemini"], [/discord/, "Discord"], [/t\.me|telegram/, "Telegram"], [/linkedin|lnkd/, "LinkedIn"], [/finnrick/, "Finnrick"], [/^direct$/, "Direct / typed"]];
+const srcName = s => { const x = String(s || "direct").toLowerCase(); for (const [re, n] of SRC_NAMES) if (re.test(x)) return n; return x; };
+const TZ_US = { "America/New_York": "US Eastern", "America/Detroit": "US Eastern", "America/Chicago": "US Central", "America/Denver": "US Mountain", "America/Phoenix": "US Mountain (Arizona)", "America/Boise": "US Mountain", "America/Los_Angeles": "US Pacific", "America/Anchorage": "Alaska", "Pacific/Honolulu": "Hawaii", "America/Puerto_Rico": "Puerto Rico" };
+const tzName = z => { if (!z) return "Unknown"; if (TZ_US[z]) return TZ_US[z]; if (/^America\/(Indiana|Kentucky)/.test(z)) return "US Eastern"; if (/^America\/North_Dakota|Menominee/.test(z)) return "US Central";
+  if (/^America\/(Toronto|Vancouver|Edmonton|Winnipeg|Halifax|Regina|St_Johns|Montreal)/.test(z)) return "Canada"; if (z === "Europe/London") return "United Kingdom"; if (/^Australia\//.test(z)) return "Australia";
+  const [a, b] = z.split("/"); return (b || a).replace(/_/g, " ") + (a === "Europe" ? ", Europe" : a === "Asia" ? ", Asia" : ""); };
+const PLACE = { offers: "Price table on a peptide", route: "My list routes", store_page: "Store page", buy_bar: "Buy bar (phone)", sheet: "Store sheet", cart_sheet: "Fill my cart", seo: "Search-engine page", product: "Peptide page", home: "Home", sales: "Sales", coa: "COA library", watchlist: "Watchlist", search: "Search", other: "Other" };
+const PRO_WHY = { purity: "Purity numbers", protocol: "My list / cart builder", watch: "More watched vials", alerts: "Price alerts", other: "Other", pricing: "Pricing page", nav: "Pro button" };
+const nf = x => (+x || 0).toLocaleString(), pct = (a, b) => b ? Math.round(100 * a / b) : 0;
+const dur = s => { s = Math.round(+s || 0); return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s"; };
+
 function vStats() {
   if (!ownerKey()) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>Owner only</b><p>Sign in with the owner key on the Vendors page first.</p><a class="btn" href="#vendors">Vendors</a></div></div>`;
-  if (!STATS) { loadStats(); return `<div class="wrap"><p class="hint" style="margin-top:40px">Loading traffic…</p></div>`; }
-  if (STATS.error) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>Couldn't load traffic</b><p>Check the owner key and try again.</p></div></div>`;
-  const S2 = STATS, T = S2.totals || {}, n = x => (+x || 0).toLocaleString();
-  const tbl = (head, rows) => rows.length ? `<table class="tbl stt"><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>` : `<p class="hint" style="padding:12px 0">Nothing yet.</p>`;
-  const vName = id => esc(V[id]?.name || id);
-  const max = Math.max(1, ...(S2.by_day || []).map(d => d.visitors));
-  const bars = (S2.by_day || []).map(d => `<div class="sbar" title="${esc(d.d)}: ${d.visitors} visitors, ${d.clicks} store clicks"><i style="height:${Math.round(d.visitors / max * 100)}%"></i><b style="height:${Math.round(d.clicks / max * 100)}%"></b></div>`).join("");
-  const card = (title, inner, sub = "") => `<div class="card panel"><div class="bar"><h3>${title}</h3>${sub}</div>${inner}</div>`;
-  return `<div class="wrap">${sec("", "Owner", "Traffic and store clicks", `<span class="row" style="gap:6px">${S2.since && new Date(S2.since) > new Date(Date.now() - STATS_DAYS * 864e5 + 6e4) ? `<span class="muted" style="font-size:12.5px">Counting since launch, ${new Date(S2.since).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>` : ""}${[7, 30, 90].map(d => `<button class="chip sm" type="button" data-statdays="${d}" aria-pressed="${STATS_DAYS === d}">${d} days</button>`).join("")}</span>`)}
-    <div class="stgrid">${[["Visitors", T.visitors], ["Page views", T.views], ["Store clicks", T.clicks], ["People who clicked out", T.clickers], ["Searches", T.searches], ["On phones", (T.mobile ?? 0) + "%"]].map(([k, v]) => `<div class="card stk"><span class="lbl">${k}</span><b class="mono">${typeof v === "string" ? v : n(v)}</b></div>`).join("")}</div>
-    ${bars ? `<div class="card panel" style="margin-top:16px"><div class="bar"><h3>By day</h3><span class="hint"><i class="sw v"></i>visitors <i class="sw c"></i>store clicks</span></div><div class="sbars">${bars}</div></div>` : ""}
-    <div class="stcols" style="margin-top:16px">
-      ${card("Clicks to each store", tbl(["Store", "Clicks", "People", "Last click"], (S2.vendors || []).map(r => `<tr><td><a href="#v-${esc(r.vendor)}">${vName(r.vendor)}</a></td><td class="mono">${n(r.clicks)}</td><td class="mono">${n(r.people)}</td><td class="t3">${esc(ago(r.last))}</td></tr>`)))}
-      ${card("Most-clicked vials", tbl(["Vial", "Store", "Clicks"], (S2.vendor_items || []).slice(0, 25).map(r => `<tr><td>${esc(short(r.pep))} ${esc(sizeTxt(r.size || ""))}</td><td>${vName(r.vendor)}</td><td class="mono">${n(r.clicks)}</td></tr>`)))}
-      ${card("Where visitors come from", tbl(["Source", "Visitors"], (S2.sources || []).map(r => `<tr><td>${esc(r.source)}</td><td class="mono">${n(r.visits)}</td></tr>`)), `<span class="hint">Tag your own links: ?utm_source=facebook&amp;utm_campaign=name</span>`)}
-      ${card("Campaigns", tbl(["Source", "Medium", "Campaign", "Visitors"], (S2.campaigns || []).map(r => `<tr><td>${esc(r.src || "")}</td><td>${esc(r.med || "")}</td><td>${esc(r.camp)}</td><td class="mono">${n(r.visits)}</td></tr>`)))}
-      ${card("Landing pages", tbl(["Page", "Visitors"], (S2.landing || []).map(r => `<tr><td>${esc(r.path)}</td><td class="mono">${n(r.visits)}</td></tr>`)))}
-      ${card("Where store clicks happen", tbl(["Place", "Clicks"], (S2.placements || []).map(r => `<tr><td>${esc(r.ctx.replace(/_/g, " "))}</td><td class="mono">${n(r.clicks)}</td></tr>`)))}
-      ${card("Top pages", tbl(["Page", "Views"], (S2.pages || []).slice(0, 25).map(r => `<tr><td>${esc(r.path)}</td><td class="mono">${n(r.views)}</td></tr>`)))}
-      ${card("What people search for", tbl(["Search", "Times"], (S2.searches || []).slice(0, 25).map(r => `<tr><td>${esc(r.q)}</td><td class="mono">${n(r.n)}</td></tr>`)))}
-    </div>
-    ${S2.inbox ? `<div class="card panel" style="margin-top:16px"><div class="bar"><h3>Messages</h3><span class="hint">${n(S2.inbox.subscribers)} on the weekly email list</span></div>${(S2.inbox.messages || []).length ? (S2.inbox.messages || []).slice(0, 40).map(m => `<div class="msg"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="pill p-n">${esc(m.kind || "message")}</span><b>${esc(m.subject || "(no subject)")}</b><span class="t3" style="font-size:12.5px">${esc(ago(m.at))}${m.email ? ` · <a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : ""}${m.page ? ` · about ${esc(V[m.page]?.name || m.page)}` : ""}</span></div><p style="margin:6px 0 0;white-space:pre-wrap">${esc(m.body)}</p></div>`).join("") : `<p class="hint" style="padding:12px 0">No messages yet. They come from pepseekr.com/contact and the "Report a correction" links.</p>`}</div>` : ""}
-    <p class="hint" style="margin:14px 0 40px">Your own visits aren't counted while the owner key is on this browser. Bots and crawlers are skipped. No cookies or IP addresses are stored.</p></div>`;
+  if (!STATS) { loadStats(); return `<div class="wrap an"><p class="hint" style="margin-top:40px">Loading analytics…</p></div>`; }
+  if (STATS.error) return `<div class="wrap"><div class="card empty" style="margin-top:30px"><b>Couldn't load analytics</b><p>Check the owner key, then reload.</p></div></div>`;
+  const S = STATS, live = S.live?.now || 0;
+  const since = new Date(S.since), startNote = S.start && Math.abs(new Date(S.start) - since) < 6e4 ? `Since launch, ${since.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${since.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : `${since.toLocaleDateString("en-US", { month: "short", day: "numeric" })} to now`;
+  const body = { overview: anOverview, audience: anAudience, content: anContent, stores: anStores, revenue: anRevenue, live: anLive, inbox: anInbox }[STATS_TAB] || anOverview;
+  return `<div class="wrap an">
+    <div class="anh"><div><h1>Analytics</h1><p class="t3">${esc(startNote)} · Central time · updates every minute${S.prev ? "" : " · Change vs. the period before shows once there's earlier data"}</p></div>
+      <div class="anr"><button type="button" class="anlive${live ? " on" : ""}" data-stab="live"><i></i>${live} on site now</button>
+        <div class="seg" role="group" aria-label="Date range">${ST_RANGES.map(([k, l]) => `<button type="button" data-srange="${k}" aria-pressed="${STATS_RANGE === k}">${l}</button>`).join("")}</div></div></div>
+    <nav class="antabs" aria-label="Analytics sections">${ST_TABS.map(([k, l]) => `<button type="button" data-stab="${k}" aria-current="${STATS_TAB === k ? "page" : "false"}">${l}${k === "inbox" && INBOX?.messages?.length ? ` <span class="anbadge">${INBOX.messages.length}</span>` : ""}</button>`).join("")}</nav>
+    ${body(S)}
+    <p class="hint anfoot">Your own visits aren't counted while the owner key is on a browser. Bots are skipped. No cookies or IP addresses are stored; regions come from the visitor's time zone.</p></div>`;
 }
-document.addEventListener("click", e => { const b = e.target.closest?.("[data-statdays]"); if (b) { STATS_DAYS = +b.dataset.statdays; STATS = null; route(true); } });
+
+// ---- building blocks ----
+function anDelta(cur, prev, S, lowerBetter) {
+  if (!S.prev) return "";
+  if (prev == null) return "";
+  if (!+prev) return +cur ? `<span class="and up">new</span>` : `<span class="and n">same as before</span>`;
+  const d = Math.round(100 * (cur - prev) / prev), good = lowerBetter ? d < 0 : d > 0;
+  return d === 0 ? `<span class="and n">no change</span>` : `<span class="and ${good ? "up" : "dn"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d)}%</span>`;
+}
+function anSpark(vals) { if (!vals || vals.length < 2) return ""; const w = 120, h = 30, m = Math.max(1, ...vals), st = w / (vals.length - 1);
+  const pts = vals.map((v, i) => `${(i * st).toFixed(1)},${(h - 3 - v / m * (h - 6)).toFixed(1)}`).join(" ");
+  return `<svg class="ansp" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`; }
+function anKpi(label, val, sub, delta, spark, help) { return `<div class="card ank"${help ? ` title="${esc(help)}"` : ""}><span class="ankl">${label}</span><b>${val}</b><span class="anks">${delta || ""}${sub ? `<span>${sub}</span>` : ""}</span>${spark || ""}</div>`; }
+function anCard(title, desc, inner, extra = "", cls = "") { return `<section class="card anc ${cls}"><div class="anct"><div><h3>${title}</h3>${desc ? `<p>${desc}</p>` : ""}</div>${extra}</div>${inner}</section>`; }
+function anTable(id, head, rows, opts = {}) {
+  if (!rows.length) return `<p class="anempty">${opts.empty || "Nothing in this range yet."}</p>`;
+  const lim = opts.limit || 12, more = rows.length > lim;
+  return `<div class="stscroll"><table class="tbl ant" id="${id}"><thead><tr>${head.map((h, i) => `<th${i ? ' class="r"' : ""}>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr${i >= lim ? ' class="anx" hidden' : ""}>${r.map((c, j) => `<td${j ? ' class="r"' : ""}>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <div class="antf">${more ? `<button type="button" class="lnk" data-anmore="${id}">Show all ${rows.length}</button>` : "<span></span>"}<button type="button" class="lnk" data-csv="${id}">Download CSV</button></div>`;
+}
+const anBar = (v, max, txt) => `<span class="anv"><span class="anbar"><i style="width:${max ? Math.max(2, Math.round(100 * v / max)) : 0}%"></i></span><b class="mono">${txt ?? nf(v)}</b></span>`;
+function anChart(S) {
+  const key = STATS_METRIC, ser = S.series || [], vals = ser.map(p => +p[key] || 0), prev = key === "visitors" && S.prev_series ? S.prev_series : null;
+  const W = 900, H = 240, pad = 28, m = Math.max(1, ...vals, ...(prev || [])), n = Math.max(2, vals.length), st = (W - 2) / (n - 1);
+  const y = v => (H - pad - v / m * (H - pad - 14)).toFixed(1), xy = (arr) => arr.map((v, i) => `${(1 + i * st).toFixed(1)},${y(v)}`);
+  const line = xy(vals).join(" L"), area = `M${xy(vals).join(" L")} L${(1 + (vals.length - 1) * st).toFixed(1)},${H - pad} L1,${H - pad} Z`;
+  const hour = S.bucket === "hour", lab = t => { const d = new Date(t + (t.endsWith("Z") ? "" : "")); return hour ? d.toLocaleTimeString("en-US", { hour: "numeric" }).replace(" ", "").toLowerCase() : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+  const every = Math.max(1, Math.ceil(vals.length / 8));
+  const ticks = ser.map((p, i) => i % every === 0 || i === ser.length - 1 ? `<text x="${(1 + i * st).toFixed(1)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === ser.length - 1 ? "end" : "middle"}">${lab(p.t)}</text>` : "").join("");
+  const grid = [0.25, 0.5, 0.75, 1].map(f => `<line x1="0" x2="${W}" y1="${y(m * f)}" y2="${y(m * f)}"/><text class="gy" x="${W}" y="${+y(m * f) - 4}" text-anchor="end">${Math.round(m * f)}</text>`).join("");
+  const dots = vals.map((v, i) => `<rect class="anhit" x="${(1 + i * st - st / 2).toFixed(1)}" y="0" width="${st.toFixed(1)}" height="${H - pad}" data-tip="${esc(lab(ser[i].t))}: ${nf(v)} ${({ visitors: "visitors", views: "page views", clicks: "store clicks", adds: "list adds and watches" })[key]}${prev && prev[i] != null ? ` (before: ${nf(prev[i])})` : ""}"/><circle cx="${(1 + i * st).toFixed(1)}" cy="${y(v)}" r="3.2"/>`).join("");
+  const tabs = [["visitors", "Visitors"], ["views", "Page views"], ["clicks", "Store clicks"], ["adds", "List adds & watches"]].map(([k, l]) => `<button type="button" data-smetric="${k}" aria-pressed="${key === k}">${l}</button>`).join("");
+  return anCard(hour ? "Activity by hour" : "Activity by day", prev ? "Dashed line: the period before, for comparison" : "", `<div class="anchart" data-k="${key}"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(key)} over time"><g class="g">${grid}</g>${prev ? `<path class="pv" d="M${xy(prev.slice(0, vals.length)).join(" L")}"/>` : ""}<path class="ar" d="${area}"/><path class="ln" d="M${line}"/><g class="pts">${dots}</g><g class="tx">${ticks}</g></svg><div class="antip" hidden></div></div>`, `<div class="seg sm" role="group" aria-label="Chart metric">${tabs}</div>`, "wide");
+}
+function anFunnel(S) {
+  const f = S.funnel || {}, top = f.visit || 0, steps = [["Visited", f.visit], ["Browsed peptides, stores or sales", f.engaged], ["Shortlisted or clicked out", f.shortlist], ["Clicked through to a store", f.out]];
+  return anCard("From visit to store", "How far visitors got in this range", `<div class="anfun">${steps.map(([l, v], i) => `<div class="anfs"><div class="anfl"><span>${l}</span><b class="mono">${nf(v)} <small>${pct(v, top)}%</small></b></div><span class="anbar big"><i style="width:${top ? Math.max(2, pct(v, top)) : 0}%"></i></span>${i ? `<span class="anfd">${pct(v, steps[i - 1][1])}% of the step before</span>` : ""}</div>`).join("")}</div>`);
+}
+function pepRows(S) {
+  const m = {}; const get = name => m[name] ||= { name, views: 0, visitors: 0, clicks: 0, adds: 0, watches: 0 };
+  const bySlug = {}; (PEPS || []).forEach(p => bySlug[slugOf(p)] = p);
+  (S.pep_views || []).forEach(r => { const p = get(bySlug[r.slug] || r.slug.replace(/-/g, " ")); p.views += r.views; p.visitors += r.visitors; p.slug = r.slug; });
+  (S.pep_acts || []).forEach(r => { const p = get(r.pep); p.clicks += r.clicks; p.adds += r.adds; p.watches += r.watches; p.slug ||= slugOf(r.pep); });
+  return Object.values(m).sort((a, b) => (b.views + b.clicks * 3 + b.adds * 2) - (a.views + a.clicks * 3 + a.adds * 2));
+}
+
+// ---- tabs ----
+function anOverview(S) {
+  const c = S.cur || {}, p = S.prev || {}, ser = S.series || [], col = k => ser.map(x => +x[k] || 0);
+  const kpis = `<div class="ankp">
+    ${anKpi("Visitors", nf(c.visitors), c.returning ? `${nf(c.returning)} returning` : "", anDelta(c.visitors, p.visitors, S), anSpark(col("visitors")))}
+    ${anKpi("Page views", nf(c.views), `${c.pps || 0} per visit`, anDelta(c.views, p.views, S), anSpark(col("views")))}
+    ${anKpi("Store clicks", nf(c.clicks), `${nf(c.clickers)} people`, anDelta(c.clicks, p.clicks, S), anSpark(col("clicks")))}
+    ${anKpi("Click-out rate", (c.ctr || 0) + "%", "of visitors reached a store", anDelta(c.ctr, p.ctr, S), "", "Share of visitors who clicked through to at least one store")}
+    ${anKpi("List adds & watches", nf((c.adds || 0) + (c.watches || 0)), `${nf(c.adds)} adds · ${nf(c.watches)} watches`, anDelta((c.adds || 0) + (c.watches || 0), (p.adds || 0) + (p.watches || 0), S), anSpark(col("adds")))}
+    ${anKpi("Avg. visit", dur(c.avg_sec), "for visits longer than one page", anDelta(c.avg_sec, p.avg_sec, S))}
+    ${anKpi("Bounce rate", (c.bounce || 0) + "%", "left after one page", anDelta(c.bounce, p.bounce, S, true), "", "Visits with one page view and no clicks, searches or adds")}
+    ${anKpi("Pro interest", nf(c.pro_views), `${nf(c.checkouts)} checkouts started`, anDelta(c.pro_views, p.pro_views, S), "", "Times a visitor opened the Pro upgrade sheet")}
+  </div>`;
+  const vMax = Math.max(1, ...(S.vendors || []).map(r => r.clicks)), srcs = Object.entries((S.sources || []).reduce((a, r) => { const k = srcName(r.source); a[k] = (a[k] || 0) + r.visits; return a; }, {})).sort((a, b) => b[1] - a[1]);
+  const peps = pepRows(S).sort((a, b) => b.views - a.views).slice(0, 6), pMax = Math.max(1, ...peps.map(r => r.views));
+  const mini = (rows, tab) => rows.length ? `<div class="anmini">${rows.join("")}</div><button type="button" class="lnk anall" data-stab="${tab}">See all</button>` : `<p class="anempty">Nothing in this range yet.</p>`;
+  return `${kpis}<div class="angrid">${anChart(S)}${anFunnel(S)}
+    ${anCard("Top stores", "Store clicks", mini((S.vendors || []).slice(0, 6).map(r => `<div class="anmr"><span>${esc(V[r.vendor]?.name || r.vendor)}</span>${anBar(r.clicks, vMax)}</div>`), "stores"))}
+    ${anCard("Top peptides", "Page views", mini(peps.map(r => `<div class="anmr"><span>${esc(short(r.name))}</span>${anBar(r.views, pMax)}</div>`), "content"))}
+    ${anCard("Top sources", "Where visitors came from", mini(srcs.slice(0, 6).map(([k, v]) => `<div class="anmr"><span>${esc(k)}</span>${anBar(v, srcs[0][1])}</div>`), "audience"))}
+  </div>`;
+}
+function anAudience(S) {
+  const tot = S.cur?.visitors || 0, src = {}; (S.sources || []).forEach(r => { const k = srcName(r.source), x = src[k] ||= { visits: 0, clickers: 0, pv: 0 }; x.visits += r.visits; x.clickers += r.clickers; x.pv += r.pps * r.visits; });
+  const sRows = Object.entries(src).sort((a, b) => b[1].visits - a[1].visits), sMax = sRows[0]?.[1].visits || 1;
+  const dev = S.devices || [], dTot = dev.reduce((a, r) => a + r.visits, 0) || 1, nr = S.newret || {};
+  const reg = {}; (S.regions || []).forEach(r => { const k = tzName(r.tz); reg[k] = (reg[k] || 0) + r.visits; }); const rRows = Object.entries(reg).sort((a, b) => b[1] - a[1]), rMax = rRows[0]?.[1] || 1;
+  const DEVN = { phone: "Phone", tablet: "Tablet", desktop: "Desktop" };
+  return `<div class="angrid">
+    ${anCard("Sources", "Where visits started, and how well each one turns into store clicks", anTable("t-src", ["Source", "Visitors", "Share", "Click-out", "Pages / visit"], sRows.map(([k, x]) => [esc(k), anBar(x.visits, sMax), pct(x.visits, tot) + "%", pct(x.clickers, x.visits) + "%", (x.pv / x.visits).toFixed(1)])), "", "wide")}
+    ${anCard("Devices", "", `<div class="anstack">${dev.map((r, i) => `<i class="c${i}" style="width:${pct(r.visits, dTot)}%"></i>`).join("")}</div><div class="anlegend">${dev.map((r, i) => `<span><i class="c${i}"></i>${DEVN[r.dev] || esc(r.dev)} <b class="mono">${pct(r.visits, dTot)}%</b> <small>${nf(r.visits)} · ${pct(r.clickers, r.visits)}% click out</small></span>`).join("")}</div>`)}
+    ${anCard("New and returning", "", `<div class="anstack">${[nr.new, nr.returning].map((v, i) => `<i class="c${i}" style="width:${pct(v, (nr.new || 0) + (nr.returning || 0))}%"></i>`).join("")}</div><div class="anlegend"><span><i class="c0"></i>New <b class="mono">${nf(nr.new)}</b></span><span><i class="c1"></i>Returning <b class="mono">${nf(nr.returning)}</b></span></div><p class="hint">Returning visitors are counted from tonight's tracking update on.</p>`)}
+    ${anCard("Regions", "From each visitor's time zone", anTable("t-reg", ["Region", "Visitors"], rRows.map(([k, v]) => [esc(k), anBar(v, rMax)]), { empty: "Regions are recorded from tonight's tracking update on." }))}
+    ${anCard("Landing pages", "The first page of each visit", anTable("t-land", ["Page", "Visits", "Bounce", "Click-out"], (S.landing || []).map(r => [`<a href="${esc(r.path)}">${esc(r.path)}</a>`, nf(r.visits), pct(r.bounces, r.visits) + "%", pct(r.clickers, r.visits) + "%"])))}
+    ${anCard("Campaigns", "Visits from tagged links (?utm_source=…&utm_campaign=…)", anTable("t-camp", ["Source", "Medium", "Campaign", "Visits", "Click-out"], (S.campaigns || []).map(r => [esc(r.src || "—"), esc(r.med || "—"), esc(r.camp || "—"), nf(r.visits), pct(r.clickers, r.visits) + "%"]), { empty: "No tagged visits yet. Add ?utm_source=reddit&utm_campaign=launch to links you share, and they'll show up here." }), "", "wide")}
+    ${anCard("Languages", "", anTable("t-lang", ["Language", "Visitors"], (S.langs || []).map(r => [esc(r.lang), nf(r.visits)]), { empty: "Recorded from tonight's tracking update on." }))}
+  </div>`;
+}
+function anContent(S) {
+  const peps = pepRows(S), pMax = Math.max(1, ...peps.map(r => r.views)), srch = S.searches || [], gaps = srch.filter(r => r.max_n === 0);
+  return `<div class="angrid">
+    ${anCard("Peptides", "Interest in each peptide: page views, list adds, watches and store clicks", anTable("t-pep", ["Peptide", "Views", "Visitors", "List adds", "Watches", "Store clicks"], peps.map(r => [`<a href="/peptides/${esc(r.slug || "")}">${esc(r.name)}</a>`, anBar(r.views, pMax), nf(r.visitors), nf(r.adds), nf(r.watches), nf(r.clicks)]), { limit: 15 }), "", "wide")}
+    ${anCard("Catalog gaps", "Searches that found nothing: peptides or stores people want that we don't list", gaps.length ? anTable("t-gap", ["Search", "Times", "People"], gaps.map(r => [`<span class="pill p-s">${esc(r.q)}</span>`, nf(r.times), nf(r.people)])) : `<p class="anempty">No empty searches in this range.</p>`)}
+    ${anCard("Searches", "", anTable("t-srch", ["Search", "Times", "People", "Results"], srch.map(r => [esc(r.q), nf(r.times), nf(r.people), r.max_n == null ? "—" : r.max_n === 0 ? `<span class="and dn">none</span>` : nf(r.max_n)])))}
+    ${anCard("Pages", "Every page, by views", anTable("t-pages", ["Page", "Views", "Visitors"], (S.pages || []).map(r => [`<a href="${esc(r.path)}">${esc(r.path)}</a>`, nf(r.views), nf(r.visitors)]), { limit: 15 }))}
+    ${anCard("Exit pages", "The last page people saw before leaving", anTable("t-exit", ["Page", "Exits"], (S.exits || []).map(r => [`<a href="${esc(r.path)}">${esc(r.path)}</a>`, nf(r.exits)])))}
+  </div>`;
+}
+function anStores(S) {
+  const vv = {}; (S.vendor_views || []).forEach(r => vv[r.vendor] = r.views);
+  const tot = S.cur?.clicks || 0, rows = (S.vendors || []).slice(), seen = new Set(rows.map(r => r.vendor));
+  Object.keys(vv).forEach(k => { if (!seen.has(k) && V[k]) rows.push({ vendor: k, clicks: 0, people: 0, prev: 0, last: null }); });
+  const mx = Math.max(1, ...rows.map(r => r.clicks)), plc = S.placements || [], pMax = Math.max(1, ...plc.map(r => r.clicks));
+  const chg = r => !S.prev ? "—" : !r.prev ? (r.clicks ? `<span class="and up">new</span>` : "—") : `<span class="and ${r.clicks >= r.prev ? "up" : "dn"}">${r.clicks >= r.prev ? "▲" : "▼"} ${Math.abs(Math.round(100 * (r.clicks - r.prev) / r.prev))}%</span>`;
+  return `<div class="angrid">
+    ${anCard("Stores", "Buyers sent to each store. Store page views are visits to that store's page on PepSeekr.", anTable("t-stores", ["Store", "Store clicks", "People", "Share", "Vs before", "Store page views", "Last click"], rows.map(r => [`<a href="#v-${esc(r.vendor)}">${esc(V[r.vendor]?.name || r.vendor)}</a>`, anBar(r.clicks, mx), nf(r.people), pct(r.clicks, tot) + "%", chg(r), nf(vv[r.vendor]), r.last ? ago(r.last) : "—"]), { limit: 20 }), "", "wide")}
+    ${anCard("Where clicks happen", "The spot on PepSeekr each store click came from", anTable("t-plc", ["Place", "Clicks"], plc.map(r => [esc(PLACE[r.ctx] || r.ctx.replace(/_/g, " ")), anBar(r.clicks, pMax)])))}
+    ${anCard("Most-clicked vials", "", anTable("t-vials", ["Vial", "Store", "Clicks"], (S.vendor_items || []).map(r => [`${esc(short(r.pep))} ${esc(sizeTxt(r.size || ""))}`, esc(V[r.vendor]?.name || r.vendor), nf(r.clicks)]), { limit: 15 }))}
+  </div>`;
+}
+function anRevenue(S) {
+  const m = S.members || {}, c = S.cur || {}, sub = S.subscribers || {}, ctx = S.pro_ctx || [], cMax = Math.max(1, ...ctx.map(r => r.n));
+  return `<div class="ankp">
+    ${anKpi("Pro members", nf(m.pro), `${nf(m.paid)} paying · ${nf(m.trialing)} on trial`)}
+    ${anKpi("Accounts", nf(m.accounts), `${nf(m.new)} new in this range`)}
+    ${anKpi("Pro interest", nf(c.pro_views), "upgrade sheet opened", anDelta(c.pro_views, S.prev?.pro_views, S))}
+    ${anKpi("Checkouts started", nf(c.checkouts), c.pro_views ? `${pct(c.checkouts, c.pro_views)}% of Pro interest` : "", anDelta(c.checkouts, S.prev?.checkouts, S))}
+    ${anKpi("Past due", nf(m.past_due), "payment failed, Stripe is retrying")}
+    ${anKpi("Canceled", nf(m.canceled), "all time")}
+    ${anKpi("Email list", nf(sub.total), `${nf(sub.new)} joined in this range`)}
+  </div><div class="angrid">
+    ${anCard("What made people look at Pro", "The locked feature they tapped before the upgrade sheet opened", anTable("t-pro", ["Feature", "Times", "People"], ctx.map(r => [esc(PRO_WHY[r.ctx] || r.ctx.replace(/_/g, " ")), anBar(r.n, cMax), nf(r.people)]), { empty: "Recorded from tonight's tracking update on." }))}
+    ${anCard("Pro funnel", "In this range", `<div class="anfun">${[["Opened the upgrade sheet", c.pro_views], ["Started checkout", c.checkouts], ["Created an account", c.signups]].map(([l, v]) => `<div class="anfs"><div class="anfl"><span>${l}</span><b class="mono">${nf(v)}</b></div></div>`).join("")}</div><p class="hint">Payment amounts, refunds and payouts are in your <a href="https://dashboard.stripe.com/" target="_blank" rel="noopener">Stripe dashboard</a>.</p>`)}
+  </div>`;
+}
+function anLive(S) {
+  const L = S.live || {}, f = S.feed || [], DEVN = { phone: "Phone", tablet: "Tablet", desktop: "Desktop" };
+  const say = e => { const v = e.vendor && (V[e.vendor]?.name || e.vendor), item = e.pep ? `${short(e.pep)}${e.size ? " " + sizeTxt(e.size) : ""}` : "";
+    return ({ land: `arrived on <b>${esc(e.path)}</b>`, view: `viewed <b>${esc(e.path)}</b>`, out: `clicked to <b>${esc(v || "a store")}</b>${item ? ` for ${esc(item)}` : ""}`, search: `searched <b>“${esc(e.q || "")}”</b>`,
+      add: `added <b>${esc(item)}</b> to their list`, watch: `started watching <b>${esc(item || "vials")}</b>`, pro: `opened the Pro upgrade`, checkout: `started Pro checkout`, signin: `signed in` })[e.kind] || esc(e.kind); };
+  return `<div class="angrid">
+    ${anCard("On site now", "Visitors active in the last 5 minutes", `<div class="anbig mono">${nf(L.now)}</div>${(L.pages || []).length ? `<div class="anmini">${L.pages.map(r => `<div class="anmr"><span>${esc(r.path)}</span><b class="mono">${nf(r.n)}</b></div>`).join("")}</div>` : `<p class="anempty">Nobody right now.</p>`}`)}
+    ${anCard("Latest activity", "The last 40 things visitors did", f.length ? `<ol class="anfeed">${f.map(e => `<li><span class="t3 mono">${esc(ago(e.at))}</span><span><span class="anwho">${DEVN[e.dev] || "Visitor"} ${esc(e.who)}</span> ${say(e)}</span></li>`).join("")}</ol>` : `<p class="anempty">No activity yet.</p>`, "", "wide")}
+  </div>`;
+}
+function anInbox() {
+  const I2 = INBOX; if (!I2) return `<p class="anempty">Couldn't load messages.</p>`;
+  return `<div class="angrid">${anCard("Messages", `${nf(I2.subscribers)} on the weekly email list`, (I2.messages || []).length ? (I2.messages || []).slice(0, 60).map(m => `<div class="msg"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="pill p-n">${esc(m.kind || "message")}</span><b>${esc(m.subject || "(no subject)")}</b><span class="t3" style="font-size:12.5px">${esc(ago(m.at))}${m.email ? ` · <a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : ""}${m.page ? ` · about ${esc(V[m.page]?.name || m.page)}` : ""}</span></div><p style="margin:6px 0 0;white-space:pre-wrap">${esc(m.body)}</p></div>`).join("") : `<p class="anempty">No messages yet. They come from pepseekr.com/contact and the "Report a correction" links.</p>`, "", "wide")}</div>`;
+}
+
+// ---- interactions ----
+document.addEventListener("click", e => {
+  const t = e.target; if (!t.closest?.(".an")) return;
+  const r = t.closest("[data-srange]"); if (r) { STATS_RANGE = r.dataset.srange; store.set("pk_srange", STATS_RANGE); STATS = null; route(true); return; }
+  const tb = t.closest("[data-stab]"); if (tb) { STATS_TAB = tb.dataset.stab; store.set("pk_stab", STATS_TAB); route(true); scrollTo({ top: 0 }); return; }
+  const mt = t.closest("[data-smetric]"); if (mt) { STATS_METRIC = mt.dataset.smetric; route(true); return; }
+  const mo = t.closest("[data-anmore]"); if (mo) { document.querySelectorAll(`#${mo.dataset.anmore} .anx`).forEach(x => x.hidden = false); mo.remove(); return; }
+  const cv = t.closest("[data-csv]"); if (cv) { const tbl = document.getElementById(cv.dataset.csv); if (!tbl) return;
+    const csv = [...tbl.rows].map(row => [...row.cells].map(c => `"${c.innerText.replace(/\s+/g, " ").trim().replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `pepseekr-${cv.dataset.csv.slice(2)}-${STATS_RANGE}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return; }
+});
+document.addEventListener("mousemove", e => {
+  const h = e.target.closest?.(".anhit"), box = e.target.closest?.(".anchart"); const tip = box?.querySelector(".antip");
+  document.querySelectorAll(".anchart .on").forEach(x => x !== h?.nextElementSibling && x.classList.remove("on"));
+  if (!h || !tip) { document.querySelectorAll(".antip").forEach(x => x.hidden = true); return; }
+  h.nextElementSibling?.classList.add("on"); tip.textContent = h.dataset.tip; tip.hidden = false;
+  const b = box.getBoundingClientRect(); tip.style.left = Math.min(b.width - tip.offsetWidth - 4, Math.max(4, e.clientX - b.left - tip.offsetWidth / 2)) + "px"; tip.style.top = Math.max(0, e.clientY - b.top - 44) + "px";
+});
 
 /* ---------- PepSeekr for stores: claim, portal, partner program ----------
    Routes: /stores (claim + my stores), /stores/<id> (portal, ?tab=score|reviews|partner|details).
@@ -2360,3 +2527,14 @@ function contactPrefill(n = 0) {
   document.addEventListener("click", hide, true);
   addEventListener("hashchange", hide);
 })();
+
+
+// ---------- analytics hooks: list adds, watches, Pro interest, checkout starts ----------
+{
+  const where = () => { const h = (HASH() || "#home").slice(1).split("?")[0]; return h.startsWith("p-") ? "product" : h.startsWith("v-") || h.startsWith("s-") ? "store_page" : h || "home"; };
+  const oAdd = addItems; addItems = function (list) { try { (list || []).slice(0, 10).forEach(i => TRK.push({ kind: "add", pep: i.pep, size: i.size, ctx: where(), path: routePath() })); } catch {} return oAdd.apply(this, arguments); };
+  const oTw = toggleWatch; toggleWatch = function (p, s) { const was = !!WATCH[p + "|" + s]?.on; const r = oTw.apply(this, arguments); if (!was && WATCH[p + "|" + s]?.on) TRK.push({ kind: "watch", pep: p, size: s, ctx: where(), path: routePath() }); return r; };
+  const oWi = watchItems; watchItems = function () { const r = oWi.apply(this, arguments); try { if (r?.n) TRK.push({ kind: "watch", ctx: "watch_all", n: r.n, path: routePath() }); } catch {} return r; };
+  const oUp = upgradeSheet; upgradeSheet = function (reason) { TRK.push({ kind: "pro", ctx: reason || "other", path: routePath() }); return oUp.apply(this, arguments); };
+  const oBl = billing; billing = function (action, plan) { if (action === "checkout") TRK.push({ kind: "checkout", ctx: plan || "pro", path: routePath() }); return oBl.apply(this, arguments); };
+}
