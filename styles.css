@@ -1041,3 +1041,7 @@ tr.focus td{background:var(--brand-a10)}tr.focus td:first-child{box-shadow:inset
 @media (max-width:640px){.stranks .stp{display:none}.stranks td,.stranks th{padding-left:6px;padding-right:6px}.stranks td:first-child{white-space:normal}}
 .st{grid-template-columns:minmax(0,1fr)}
 .st>*{min-width:0}
+/* vendor table sort: price / purity */
+.osort{gap:6px;margin-top:8px;align-items:center;flex-wrap:nowrap}
+.osort .chip.lk{display:inline-flex;align-items:center;gap:4px;border-style:dashed}
+.osort .chip.lk svg{width:12px;height:12px}

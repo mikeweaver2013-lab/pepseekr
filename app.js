@@ -87,7 +87,7 @@ const STARWORD = ["", "Bad", "Not great", "Okay", "Good", "Great"];
 /* ---------- state ---------- */
 let FR_MID = 3.9, D = null, V = {}, ROWS = [], ALERTS = [], RV = { stats: {}, recent: [] }, PEPS = [];
 const S = Object.assign({ q: "", cat: "All", sort: "ppu", rep: false, stock: true, coa: false, ship: false, vendor: "", strat: "rec", one: false, swaps: true, open: null }, store.get("pf_filters", {}), { q: "", cat: "All", vendor: "" });
-const saveS = () => { store.set("pf_filters", { sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, fill: S.fill, strat: S.strat, one: S.one, swaps: S.swaps }); prefsDirty(); };
+const saveS = () => { store.set("pf_filters", { osort: S.osort, sort: S.sort, rep: S.rep, stock: S.stock, coa: S.coa, ship: S.ship, fill: S.fill, strat: S.strat, one: S.one, swaps: S.swaps }); prefsDirty(); };
 let HIDE = new Set(store.get("pf_hidden", []));
 let WATCH = store.get("pf_watch", null);           // { "pep|size": {target, on, drop, restock, sale} }
 let PROT = store.get("pf_proto2", null);           // [{pep,size,qty}]
@@ -511,7 +511,8 @@ function vProduct(slug) {
   const sizes = Object.keys(g).sort((a, b) => g[a][0].sv - g[b][0].sv);
   const overall = bestOf(all) || all[0];
   const size = curSize[p] && g[curSize[p]] ? curSize[p] : overall.size;
-  const raw = g[size], list = vis(raw).sort((a, b) => (b.stock - a.stock) || eff(a) - eff(b));
+  const byPur = S.osort === "purity" && isPro() && PUR;
+  const raw = g[size], list = vis(raw).sort((a, b) => (b.stock - a.stock) || (byPur ? (purVal(b) ?? -1) - (purVal(a) ?? -1) : 0) || eff(a) - eff(b));
   // the store you came from stays in the table even if a filter would hide it
   if (FOCUS_V && !list.some(r => r.v === FOCUS_V)) { const fr = raw.find(r => r.v === FOCUS_V); if (fr) list.push(fr); }
   const b = bestPrice(list) || bestPrice(raw) || raw[0], nV = new Set(all.map(r => r.v)).size;
@@ -526,7 +527,7 @@ function vProduct(slug) {
         <div class="bp"><span class="lbl donly">Best ${esc(sizeTxt(size))} price${promoOf(V[b.v]) ? " with deal" : ""}</span><b>${money2(dealUnit(b))}</b>${promoOf(V[b.v]) ? `<span class="row" style="gap:6px;margin-top:4px">${dealTag(V[b.v])}<span class="hint">${esc(dealNote(b))}</span></span>` : ""}<span class="mono ${pct > 0 ? "data" : "t3"}" style="font-size:13px">${pct > 0 ? "−" + pct + "% vs average" : "at average"}</span><div class="pacts">${b.stock ? `<a class="btn p lg" href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener">Buy at ${esc(V[b.v].name)} ${I.ext}</a>` : `<span class="pill p-n">Out of stock everywhere</span>`}<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm" type="button" data-watch="${esc(p)}" data-size="${esc(size)}" aria-pressed="${!!w.on}">${I.star} ${w.on ? "Watching" : "Watch"}</button>${isPro() ? `<button class="btn sm" type="button" data-addlist="${esc(p)}|${esc(size)}">${PROT.some(i => i.pep === p && i.size === size) ? I.check + " On my list" : I.plus + " Add to list"}</button>` : proLock("protocol", "Add to list")}</div><span class="ruo" style="text-align:right">Research use only</span></div></div></div>
       <div class="sizes monly" role="radiogroup" aria-label="Vial size">${sizes.map(s => { const lb = bestPrice(g[s]); return `<button type="button" role="radio" data-sz="${esc(s)}" aria-checked="${s === size}"><b>${esc(sizeTxt(s))}</b><small>${lb ? "from " + money(dealUnit(lb)) : "out"}</small></button>`; }).join("")}</div>
       ${b.v && V[b.v].promo_text ? `<div class="promo"><b><a href="${esc(b.url || V[b.v].url)}" target="_blank" rel="noopener" style="text-decoration:underline">${esc(V[b.v].name)} ↗</a>: ${esc(V[b.v].promo_text)}</b><div class="hint" style="margin-top:2px">${esc((V[b.v].promo_detail || "").replace(/\.?$/, ". ").replace(/^\. $/, ""))}${promoOf(V[b.v]) ? "The prices and $/mg below count this deal." : "Prices shown are before this discount."}</div></div>` : ""}
-      ${affNote()}<div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span></div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("rep", "Hide low-rated")}</span><span class="donly">${ck("fill", "Fills your cart")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>${(() => { const on = [["stock", "In stock only"], ["coa", "COA on file"], ["rep", "Hide low-rated"], ["fill", "Fills your cart"], ["ship", "Including shipping"]].filter(([k]) => S[k]);
+      ${affNote()}<div class="card"><div class="phd"><div><span class="lbl">Vendor comparison · ${esc(sizeTxt(size))}</span>${osortCtl()}</div><div class="row" style="gap:16px">${ck("stock", "In stock only")}<span class="donly">${ck("coa", "COA on file")}</span><span class="donly">${ck("rep", "Hide low-rated")}</span><span class="donly">${ck("fill", "Fills your cart")}</span><span class="donly">${ck("ship", "Include shipping")}</span></div></div>${(() => { const on = [["stock", "In stock only"], ["coa", "COA on file"], ["rep", "Hide low-rated"], ["fill", "Fills your cart"], ["ship", "Including shipping"]].filter(([k]) => S[k]);
         return on.length ? `<div class="fbar"><span class="lbl">Your filters</span>${on.map(([k, t]) => `<button class="chip sm" type="button" data-filt="${k}" aria-label="Turn off ${t}">${t} <span aria-hidden="true">✕</span></button>`).join("")}<span class="t2" style="font-size:13px">${list.length < raw.length ? `Showing ${list.length} of ${raw.length} offers.` : `All ${raw.length} offers shown.`}</span>${list.length < raw.length ? `<button class="link" type="button" data-showall>Show all</button>` : ""}</div>` : ""; })()}
         ${list.length ? `<table class="tbl offers"><thead><tr><th>Vendor</th><th>Price</th><th>$/${unitTxt(b.unit)}</th><th>COA</th><th>Rating</th><th>Shipping</th><th></th></tr></thead><tbody>${list.map(r => offerRow(r, multi && r === b)).join("")}</tbody></table>
         <ul class="ocards monly" style="padding:12px">${list.map(r => offerCard(r, multi && r === b)).join("")}</ul>${sizeHint(p, size, g)}` : `<div class="empty"><b>No offers match your filters</b><p>Turn off “In stock only” or “COA on file” to see every vendor.</p><button class="btn" type="button" data-clearf>Clear filters</button></div>`}</div>
@@ -540,6 +541,12 @@ function vProduct(slug) {
       ${signupBox("product")}
     </aside></div></div>`;
 }
+// sort the vendor table by price (default) or by lab-report purity (Pro; purity comes from pk_purity)
+const purVal = r => { if (r.coa !== true || r.coaState === "reused") return null; const x = PUR && PUR[r.url]; return x && x[0] != null ? +x[0] : null; };
+function osortCtl() {
+  const cur = S.osort === "purity" && isPro() ? "purity" : "price";
+  return `<div class="row osort" role="group" aria-label="Sort vendors"><span class="hint">Sort</span><button type="button" class="chip sm" aria-pressed="${cur === "price"}" data-osort="price">Price</button>${isPro() ? `<button type="button" class="chip sm" aria-pressed="${cur === "purity"}" data-osort="purity">Purity</button>` : `<button type="button" class="chip sm lk" data-upgrade="purity" aria-label="Sort by purity: Pro">${I_LOCK}Purity</button>`}</div>`;
+}
 function hist(rv) { const d = [5, 4, 3, 2, 1].map(s => rv.filter(r => r.stars === s).length), t = rv.length || 1; return `<div class="hist">${[5, 4, 3, 2, 1].map((s, i) => `<div><span>${s}★</span><i><b style="width:${Math.round(d[i] / t * 100)}%"></b></i><span>${d[i]}</span></div>`).join("")}</div>`; }
 function offerRow(r, best) {
   const v = V[r.v];
@@ -551,7 +558,7 @@ function offerRow(r, best) {
 function offerCard(r, best) {
   const v = V[r.v];
   return `<li class="card ocard ${best ? "glow" : ""} ${FOCUS_V === r.v ? "focus" : ""}" data-ov="${esc(r.v)}"><a class="t" href="${esc(r.url || v.url)}" target="_blank" rel="noopener">${avatar(v)}<span style="min-width:0"><b>${esc(v.name)}</b><span class="row" style="gap:4px;margin-top:3px">${best ? `<span class="pill p-best">Best value</span>` : ""}${dealTag(v)}${vBadge(v)}${cartPill(v)}${tiePill(v)}${r.stock ? "" : `<span class="pill p-n">Out of stock</span>`}</span></span><span class="px"><b>${money2(r.price)}</b><span>${money2(eff(r) / r.sv)}/${unitTxt(r.unit)}${promoOf(v) ? " with deal" : ""}</span></span></a>${promoOf(v) ? `<div class="dealnote" style="padding:0 14px 10px">${esc(dealNote(r))}</div>` : ""}
-    <div class="bt"><span>${I.truck.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}${esc(shipText(v))}</span><span class="row" style="gap:8px">${r.sale && r.reg ? `<s class="mono">${money2(r.reg)}</s>` : ""}${coaB(r)}<span class="mono">${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : ""}</span></span></div></li>`;
+    <div class="bt"><span>${I.truck.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}${esc(shipText(v))}</span><span class="row" style="gap:8px">${r.sale && r.reg ? `<s class="mono">${money2(r.reg)}</s>` : ""}${coaB(r)}${purB(r)}<span class="mono">${v.rvN ? "★ " + v.rvAvg.toFixed(1) : v.rep_trustpilot ? "★ " + (+v.rep_trustpilot).toFixed(1) : ""}</span></span></div></li>`;
 }
 const HCACHE = {};
 async function drawChart(p, size) {
@@ -2023,6 +2030,7 @@ document.addEventListener("click", async e => {
   }
   const fl = t.closest("[data-filt]"); if (fl) { S[fl.dataset.filt] = !S[fl.dataset.filt]; saveS(); $$(`[data-filt="${fl.dataset.filt}"]`).forEach(x => x.setAttribute("aria-checked", S[fl.dataset.filt])); if ($("#sheet").classList.contains("open")) { const b = $("#sheet .sfoot .btn.p"); if (b) b.textContent = `Show ${vis().length} offers`; refreshGrid(); } else route(true); return; }
   if (t.closest("[data-clearf]")) { Object.assign(S, { rep: false, stock: false, coa: false, fill: false, ship: false, vendor: "", cat: "All", q: "" }); saveS(); if ($("#sheet").classList.contains("open")) filterSheet(); route(true); return; }
+  const os = t.closest("[data-osort]"); if (os) { S.osort = os.dataset.osort; saveS(); route(true); return; }
   const so = t.closest("[data-sortopt]"); if (so) { S.sort = so.dataset.sortopt; saveS(); $$("[data-sortopt]").forEach(x => x.setAttribute("aria-checked", x === so)); refreshGrid(); return; }
   if (t.closest("[data-filters]")) { filterSheet(); return; }
   if (t.closest("[data-stores]")) { storesSheet(); return; }
