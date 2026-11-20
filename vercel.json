@@ -52,6 +52,15 @@
           "value": "noindex"
         }
       ]
+    },
+    {
+      "source": "/stores/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
     }
   ],
   "redirects": [
@@ -178,6 +187,14 @@
     },
     {
       "source": "/seller-log",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/stores",
+      "destination": "/shell.html"
+    },
+    {
+      "source": "/stores/:id",
       "destination": "/shell.html"
     }
   ]

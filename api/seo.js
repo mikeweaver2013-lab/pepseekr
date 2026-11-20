@@ -102,7 +102,7 @@ const DOCS = {
     <h3>What it reads</h3><p>Only what any shopper can see without signing in: product names, sizes, prices, stock, sale and promotion banners, and the lab reports linked from product pages. It never logs in, never places orders and never collects customer data.</p>
     <h3>How often</h3><p>Prices about every 2 hours, using your store's public product feed where you have one. Product pages for lab reports a few at a time, with pauses between requests, and each page no more than every few days.</p>
     <h3>Why stores are listed</h3><p>Shoppers use PepSeekr to compare prices and lab reports, then buy on your site. Every listing links straight to your store. No store can pay for placement or rank.</p>
-    <h3 id="remove">Change or remove your listing</h3><p>If you run a store and want a listing corrected, want us to stop reading your site, or want to allow PepSeekrBot through your firewall, <a href="/contact?topic=store-owner">tell us here</a>. Removal requests are handled within 2 business days, and we confirm by email from your store's domain.</p>
+    <h3 id="remove">Change or remove your listing</h3><p><a href="/stores">Claim your store</a> to see the buyers we send you, what raises your score, and your reviews. If you want a listing corrected, want us to stop reading your site, or want to allow PepSeekrBot through your firewall, <a href="/contact?topic=store-owner">tell us here</a>. Removal requests are handled within 2 business days, and we confirm by email from your store's domain.</p>
     <p>You can also block PepSeekrBot by name in your firewall or robots.txt. If you do, your prices stop updating, and after 7 days without fresh prices your listing is hidden.</p>`],
   contact: ["Contact PepSeekr", "Send PepSeekr a question, a correction or a store suggestion.", `
     <h2>Contact PepSeekr</h2>
@@ -204,7 +204,7 @@ function build(t, s, C) {
       ${groups.map(([c, l]) => `<h3>${esc(c)}</h3><ul class="seo-cols">${l.map(p => { const b = lowFor(p); return `<li>${pLink(p)}${b ? ` <span>from ${money(b.price)} (${esc(sizeTxt(b.size))})</span>` : ""}</li>`; }).join("")}</ul>`).join("")}
       <h3>Stores</h3><ul class="seo-cols">${Object.values(V).filter(v => ROWS.some(r => r.v === v.id)).sort((a, b) => a.name.localeCompare(b.name)).map(v => `<li>${vLink(v)}</li>`).join("")}</ul>
       ${Object.keys(INF).length ? `<h3>Creator-linked stores</h3><ul class="seo-cols">${Object.values(INF).map(i => `<li><a href="/influencers/${i.slug}">${esc(i.name)}</a> <span>${i.stores.map(v => esc(v.name)).join(", ")}</span></li>`).join("")}</ul>` : ""}
-      <p><a href="/sales">Today's sales</a> · <a href="/method">How PepSeekr works</a> · <a href="/about">About</a> · <a href="/bot">For stores</a> · <a href="/contact">Contact</a></p>
+      <p><a href="/sales">Today's sales</a> · <a href="/method">How PepSeekr works</a> · <a href="/about">About</a> · <a href="/stores">For stores</a> · <a href="/contact">Contact</a></p>
       ${note(at)}`;
     return t === "home"
       ? { path: "/", route: "home", title: "PepSeekr: compare research peptide prices across every store", desc: `Compare ${PEPS.length} research peptides across ${nV} stores: price per mg, lab reports, stock and shipping. BPC-157, retatrutide, tirzepatide, GHK-Cu and more, checked every 2 hours.`, body,

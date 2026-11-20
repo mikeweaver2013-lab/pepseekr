@@ -275,7 +275,7 @@ const awBox = () => `<button type="button" class="ck awbox" role="checkbox" aria
 /* ---------- clean URLs ----------
    The app still thinks in "#route" strings (p-bpc-157, v-core, alerts...). HASH() derives that string from the real
    path, toPath() turns one back into a path, and go() navigates with history.pushState (no page reload). */
-const APP_ROUTES = /^#(home|search|vendors|sellers|list|protocol|alerts|watchlist|coa|account|stats|sales|seller-log|doc|p-[\w%-]+|v-[\w%-]+|s-[\w%-]+|c-[\w%-]+)(\?.*)?$/;
+const APP_ROUTES = /^#(home|search|vendors|sellers|list|protocol|alerts|watchlist|coa|account|stats|sales|seller-log|doc|p-[\w%-]+|v-[\w%-]+|s-[\w%-]+|c-[\w%-]+|stores|st-[\w%-]+)(\?.*)?$/;
 function HASH() {
   const p = location.pathname.replace(/\/+$/, "") || "/", q = location.search, seo = document.getElementById("seo")?.dataset.route;
   let m, r;
@@ -283,6 +283,7 @@ function HASH() {
   else if ((m = p.match(/^\/peptides\/([^/]+)$/))) r = "p-" + m[1];
   else if ((m = p.match(/^\/vendors\/([^/]+)$/))) r = "v-" + m[1];
   else if ((m = p.match(/^\/compare\/([^/]+-vs-[^/]+)$/))) r = "c-" + m[1];
+  else if ((m = p.match(/^\/stores\/([^/]+)$/))) r = "st-" + m[1];
   else if ((m = p.match(/^\/vendors\/([^/]+)\/reviews$/))) return "#v-" + m[1] + (q ? q + "&" : "?") + "rv=1";   // shareable link to a store's reviews
   else if (p === "/peptides") r = "search";
   else if (p === "/influencers") r = "vendors";
@@ -300,6 +301,7 @@ function toPath(h) {
   if (r.startsWith("v-") && /(^|&)rv=1(&|$)/.test(q || "")) { const rest = q.split("&").filter(x => x !== "rv=1").join("&"); return "/vendors/" + r.slice(2) + "/reviews" + (rest ? "?" + rest : ""); }
   if (r.startsWith("v-") || r.startsWith("s-")) return "/vendors/" + r.slice(2) + qs;
   if (r.startsWith("c-")) return "/compare/" + r.slice(2) + qs;
+  if (r.startsWith("st-")) return "/stores/" + r.slice(3) + qs;
   if (r === "protocol") return "/list" + qs;
   if (r === "sellers") return "/vendors" + qs;
   return "/" + r + qs;
@@ -375,7 +377,7 @@ function chrome() {
     <a class="mib" href="#search" aria-label="Search">${I.search}</a><a class="mib" href="#alerts" aria-label="${n} unread alerts">${I.bell}${cnt}</a>${acctBtn("mib")}</div>`;
   const tb = (hh, t, k, icn, extra = "") => `<a href="#${hh}" ${tab === k ? 'aria-current="page"' : ""}><i>${icn}</i>${t}${extra}</a>`;
   $("#tabbar").innerHTML = tb("home", "Index", "index", I.home) + tb("search", "Search", "search", I.search) + tb("list", "My list", "protocol", I.dl) + tb("alerts", "Alerts", "alerts", I.bell, cnt) + tb("watchlist", "Watchlist", "watchlist", I.star);
-  $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything, and stores can't pay for placement or rank. Some store links may earn us a commission; it never changes the order. Confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="/sales">Sales today</a> · <a href="/method">How it works</a> · <a href="/pricing">Pricing</a> · <a href="/about">About</a> · <a href="/contact">Contact</a> · <a href="/contact?topic=store">List or suggest a store</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
+  $("#foot").innerHTML = `<div class="wrap in"><div style="display:grid;gap:10px">${wordmark(res === "light" ? "#fff" : undefined)}<p>Prices pulled every 2 hours from sellers' own sites · content is user-generated and unverified. PepSeekr doesn't sell anything, and stores can't pay for placement or rank. Some store links may earn us a commission; it never changes the order. Confirm price, stock and lab reports on the seller's page before you buy.</p><p><a href="/sales">Sales today</a> · <a href="/method">How it works</a> · <a href="/pricing">Pricing</a> · <a href="/about">About</a> · <a href="/stores">For stores</a> · <a href="/contact">Contact</a> · <a href="/contact?topic=store">List or suggest a store</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p></div><div class="ru">FOR LABORATORY RESEARCH USE ONLY</div></div>`;
 }
 function bellDD() {
   const list = ALERTS.filter(relevant).slice(0, 4), since = seenAlerts();
@@ -1623,6 +1625,218 @@ function vStats() {
 }
 document.addEventListener("click", e => { const b = e.target.closest?.("[data-statdays]"); if (b) { STATS_DAYS = +b.dataset.statdays; STATS = null; route(true); } });
 
+/* ---------- PepSeekr for stores: claim, portal, partner program ----------
+   Routes: /stores (claim + my stores), /stores/<id> (portal, ?tab=score|reviews|partner|details).
+   Private numbers come from pk_store_stats, which only answers for the store's own members (and the site owner).
+   Everything else on the portal is worked out from the same public data every shopper sees. */
+let MYSTORES = null, PORTAL = {}, PENDING = null, CLAIM = { pick: store.get("pk_claim", "") || "", busy: false, msg: "" }, PARTNER_RUN = null;
+async function loadMyStores(force) {
+  if (!SESS) { MYSTORES = null; return; }
+  if (MYSTORES && !force) return;
+  try { const { data } = await sbc().rpc("pk_store_mine"); MYSTORES = data || []; } catch { MYSTORES = []; }
+  if (ME && ME.pro_source === "owner" || (MYSTORES || []).some(s => s.role === "admin")) { try { const { data } = await sbc().rpc("pk_store_pending"); PENDING = data || []; } catch { PENDING = []; } }
+  const h = HASH(); if (h === "#stores" || h.startsWith("#st-")) route(true);
+}
+async function loadPortal(id, force) {
+  if (!SESS) return;
+  if (PORTAL[id] && !force) return;
+  PORTAL[id] = PORTAL[id] || { loading: true };
+  try { const { data, error } = await sbc().rpc("pk_store_stats", { p_vendor: id, p_days: 30 }); PORTAL[id] = error ? { error: error.message } : data; }
+  catch (e) { PORTAL[id] = { error: String(e.message || e) }; }
+  if (HASH().startsWith("#st-" + id)) route(true);
+}
+const storeName = id => V[id]?.name || (MYSTORES || []).find(s => s.id === id)?.name || id;
+const pctTxt = n => (n > 0 ? "+" : "") + n + "%";
+
+function vStores() {
+  if (!SESS) {
+    MYSTORES = null; PORTAL = {};
+    const opts = Object.values(V).sort((a, b) => a.name.localeCompare(b.name)).map(v => `<option value="${esc(v.id)}" ${CLAIM.pick === v.id ? "selected" : ""}>${esc(v.name)}</option>`).join("");
+    return `<div class="wrap narrow st"><div class="sthero"><span class="lbl">PepSeekr for stores</span><h1>See how buyers find your store</h1>
+      <p class="t2">Free for every store we list. See the buyers we send you, what raises your score, and your verified reviews. Run your partner program from the same page.</p></div>
+      <div class="card panel"><h3>Claim your store</h3>
+        <label class="lbl" for="stPick" style="margin-top:12px;display:block">Your store</label>
+        <select id="stPick" class="authin" data-stpick><option value="">Choose your store</option>${opts}</select>
+        <p class="hint" style="margin-top:10px">Sign in with an email at your store's own domain, like you@${esc(CLAIM.pick && V[CLAIM.pick] ? hostOf(V[CLAIM.pick].url) : "yourstore.com")}, or the address published on your site, and you're in straight away. With any other email, we verify you by hand within a day.</p>
+        <div id="authBox" style="margin-top:12px">${authForm()}</div></div>
+      <p class="hint" style="margin-top:14px">Being on PepSeekr is free and your score can't be bought. <a class="link" href="/bot">What we read from your site</a>.</p></div>`;
+  }
+  if (MYSTORES === null) { loadMyStores(); return `<div class="wrap narrow st"><div class="card empty" style="margin-top:30px"><b>Loading your stores…</b></div></div>`; }
+  const admin = MYSTORES.some(s => s.role === "admin");
+  const mine = MYSTORES.filter(s => admin ? false : true);
+  const opts = Object.values(V).filter(v => !MYSTORES.some(s => s.id === v.id && s.role !== "admin")).sort((a, b) => a.name.localeCompare(b.name)).map(v => `<option value="${esc(v.id)}" ${CLAIM.pick === v.id ? "selected" : ""}>${esc(v.name)}</option>`).join("");
+  return `<div class="wrap narrow st"><div class="sthero"><span class="lbl">PepSeekr for stores</span><h1>${mine.length ? "Your stores" : "Claim your store"}</h1>
+      <p class="t2">Signed in as ${esc(SESS.user.email)}.</p></div>
+    ${mine.length ? `<div class="card panel"><ul class="stlist">${mine.map(s => `<li><a class="srow" href="#st-${esc(s.id)}"><span>${avatarById(s.id)}<b>${esc(s.name)}</b><small>${s.status === "pending" ? "Waiting for us to verify you" : s.role === "owner" ? "Owner" : "Teammate"}</small></span>${s.status === "pending" ? `<span class="pill p-warn">Pending</span>` : I.chev || "›"}</a></li>`).join("")}</ul></div>` : ""}
+    ${admin ? adminStores() : ""}
+    <div class="card panel"><h3>${mine.length ? "Claim another store" : "Which store is yours?"}</h3>
+      <select id="stPick" class="authin" data-stpick style="margin-top:12px"><option value="">Choose your store</option>${opts}</select>
+      <p class="hint" style="margin-top:10px">${CLAIM.pick && V[CLAIM.pick] ? (emailFits(CLAIM.pick) ? `Your email is at ${esc(hostOf(V[CLAIM.pick].url))}, so you'll be in straight away.` : `Your email isn't at ${esc(hostOf(V[CLAIM.pick].url))}, so we'll verify you by hand within a day. For instant access, sign in with an email at your store's domain.`) : "Choose your store to continue."}</p>
+      ${CLAIM.msg ? `<p class="${/verify|wait/i.test(CLAIM.msg) ? "hint" : "warn"}" role="status" style="margin-top:8px">${esc(CLAIM.msg)}</p>` : ""}
+      <button class="btn p" type="button" data-stclaim style="margin-top:12px" ${!CLAIM.pick || CLAIM.busy ? "disabled" : ""}>${CLAIM.busy ? "Claiming…" : "Claim this store"}</button></div></div>`;
+}
+const emailFits = id => { const e = (SESS?.user?.email || "").toLowerCase(), h = hostOf(V[id]?.url || ""); return !!h && (e.endsWith("@" + h) || e.endsWith("." + h)); };
+const avatarById = id => V[id] ? avatar(V[id]) : `<span class="av" aria-hidden="true">${esc((storeName(id) || "?")[0])}</span>`;
+function adminStores() {
+  const p = PENDING || [];
+  return `<div class="card panel"><div class="bar"><h3>Claims to verify</h3><span class="mono t3" style="font-size:12px">${p.length}</span></div>
+    ${p.length ? `<ul class="stlist">${p.map(c => `<li class="row" style="justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--border)"><span><b>${esc(c.name)}</b><small class="hint" style="display:block">${esc(c.email)}</small></span><span class="row" style="gap:6px"><button class="btn sm" type="button" data-stdecide="${esc(c.vendor)}|${esc(c.email)}|0">Decline</button><button class="btn sm p" type="button" data-stdecide="${esc(c.vendor)}|${esc(c.email)}|1">Approve</button></span></li>`).join("")}</ul>` : `<p class="hint" style="margin-top:6px">No claims waiting.</p>`}
+    <p class="hint" style="margin-top:10px">As the site owner you can open any store's portal: <a class="link" href="#vendors">pick a store</a>, then add /stores/ before its name in the address, or use the list below.</p>
+    <select class="authin" data-stjump style="margin-top:8px"><option value="">Open a store's portal</option>${Object.values(V).sort((a, b) => a.name.localeCompare(b.name)).map(v => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join("")}</select></div>`;
+}
+
+/* ---------- portal ---------- */
+const P_TABS = [["", "Overview"], ["score", "Your score"], ["reviews", "Reviews"], ["partner", "Partner program"], ["details", "Store details"]];
+function vPortal(id) {
+  const tab = new URLSearchParams((HASH().split("?")[1]) || "").get("tab") || "";
+  if (!SESS) return `<div class="wrap narrow st"><div class="card empty" style="margin-top:30px"><b>Sign in to see your store portal</b><a class="btn p" href="#stores">Sign in</a></div></div>`;
+  const P = PORTAL[id];
+  if (!P) { loadPortal(id); return `<div class="wrap st"><div class="card empty" style="margin-top:30px"><b>Loading your portal…</b></div></div>`; }
+  if (P.loading) return `<div class="wrap st"><div class="card empty" style="margin-top:30px"><b>Loading your portal…</b></div></div>`;
+  if (P.error) return `<div class="wrap narrow st"><div class="card empty" style="margin-top:30px"><b>${/not_allowed/.test(P.error) ? "This portal belongs to another store" : "We couldn't load your portal"}</b><p>${/not_allowed/.test(P.error) ? "Claim your own store to see its numbers." : "Check your connection and try again."}</p><a class="btn p" href="#stores">Your stores</a></div></div>`;
+  const v = V[id];
+  const body = !v ? `<div class="card panel"><h3>Your store isn't showing on PepSeekr right now</h3><p class="t2" style="margin-top:6px">We couldn't read fresh prices from your site for 7 days, so your listings are hidden until we can. Check that your product pages are public, and that your firewall allows PepSeekrBot.</p><a class="link" href="/bot">What PepSeekrBot reads</a></div>`
+    : tab === "score" ? pScore(v, P) : tab === "reviews" ? pReviews(v, P) : tab === "partner" ? pPartner(v, P) : tab === "details" ? pDetails(v, P) : pOverview(v, P);
+  return `<div class="wrap st"><div class="sthead"><div class="row" style="gap:12px">${avatarById(id)}<div><span class="lbl">Store portal</span><h1>${esc(storeName(id))}</h1></div></div>
+      ${v ? `<a class="btn sm" href="#v-${esc(id)}">View public page</a>` : ""}</div>
+    <nav class="sttabs" aria-label="Portal sections">${P_TABS.map(([k, t]) => `<a href="#st-${esc(id)}${k ? "?tab=" + k : ""}" ${tab === k ? 'aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
+    ${body}</div>`;
+}
+function tile(n, label, sub) { return `<div class="sttile"><b class="mono">${n}</b><span class="lbl">${label}</span>${sub ? `<small class="hint">${sub}</small>` : ""}</div>`; }
+function pOverview(v, P) {
+  const d = P.sent_prev ? Math.round((P.sent - P.sent_prev) / P.sent_prev * 100) : null;
+  const ranks = pepRanks(v.id), firsts = ranks.filter(r => r.pos === 1).length;
+  return `<div class="card panel stscore"><div class="row" style="gap:18px;flex-wrap:wrap">${ring(v.score, 72)}<div><div class="lbl">Rank #${v.rank} of ${Object.keys(V).length} · ${scoreWord(v.score)}</div>
+      <p class="t2" style="margin-top:6px">Prices checked every 2 hours. Lowest price on ${firsts} of ${ranks.length} vials you sell.</p><a class="link" href="#st-${esc(v.id)}?tab=score">What would raise your score</a></div></div></div>
+    <div class="sttiles">${tile(P.sent, "Buyers sent to your site", "last 30 days" + (d != null ? ` · ${pctTxt(d)} vs the 30 before` : ""))}${tile(P.carts, "Carts filled at your checkout", "last 30 days")}${tile(P.views, "Views of your store page", "last 30 days")}${tile(v.count, "Listings we track", "")}</div>
+    ${P.by_peptide?.length ? `<div class="card panel"><h3>What buyers clicked through for</h3><ul class="stbars">${P.by_peptide.map(x => `<li><span>${esc(x.pep)}</span><span class="cbar sm"><i style="width:${x.n / P.by_peptide[0].n * 100}%"></i></span><b class="mono">${x.n}</b></li>`).join("")}</ul></div>` : `<div class="card panel"><h3>Buyers sent to your site</h3><p class="hint" style="margin-top:6px">When buyers click through to your store, you'll see which peptides they came for here. Every link we send carries utm_source=pepseekr, so you'll also see us in your own analytics.</p></div>`}
+    ${(P.coa_wrong || []).length ? `<div class="card panel warnbox"><h3>Lab reports that don't match the product</h3><p class="t2" style="margin-top:6px">The report linked on these pages is for a different compound, so we don't count it.</p><ul class="stlist">${P.coa_wrong.map(w => `<li style="padding:8px 0;border-top:1px solid var(--border)"><a class="link" href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.peptide)} ${esc(sizeTxt(w.size || ""))}</a><small class="hint" style="display:block">Report is for ${esc(w.report || "another compound")}</small></li>`).join("")}</ul></div>` : ""}`;
+}
+// where each of your listings stands on price (vs every store selling the same peptide and size); other stores aren't named
+function pepRanks(id) {
+  const g = {}; ROWS.filter(r => r.stock).forEach(r => (g[r.pep + "|" + r.size] ??= []).push(r));
+  return Object.values(g).map(list => {
+    const mine = list.filter(r => r.v === id).sort((a, b) => dealUnit(a) - dealUnit(b))[0]; if (!mine) return null;
+    const best = {}; list.forEach(r => { const u = dealUnit(r); if (best[r.v] == null || u < best[r.v]) best[r.v] = u; });
+    const sorted = Object.values(best).sort((a, b) => a - b), you = dealUnit(mine);
+    return { pep: mine.pep, size: mine.size, you, pos: sorted.indexOf(you) + 1, of: sorted.length, low: sorted[0], med: med(sorted) };
+  }).filter(Boolean).sort((a, b) => (a.pos - b.pos) || a.pep.localeCompare(b.pep));
+}
+function pScore(v, P) {
+  const rel = Math.round((v.priceIdx - 1) * 100);
+  const ship = v.free_ship_over != null ? `Free shipping over ${money(v.free_ship_over)}.${v.free_ship_over > 150 ? ` Free shipping at $150 or less earns all 10.` : ""}` : v.ship_flat != null ? `Flat ${money(v.ship_flat)} shipping, no free-shipping threshold found. A free-shipping threshold of $150 or less earns all 10.` : `We couldn't find a free-shipping threshold on your site. If you offer one, <a class="link" href="#st-${esc(v.id)}?tab=details">add it in Store details</a>: $150 or less earns all 10.`;
+  const parts = [
+    ["Lab results and reviews", v.pts.rep, 45, (v.tested ? `Independent lab tests: ${v.finnrick_pct}% acceptable across ${v.finnrick_tests || "your"} tests. ` : `No published independent lab tests yet, so you start half a star below the middle of tested stores. When your results are public, we pick them up within a week. `) + `${v.rvN ? `${v.rvN} verified review${v.rvN === 1 ? "" : "s"}, ${v.rvAvg.toFixed(1)} average.` : "No verified reviews yet."} Each verified review moves this score. <a class="link" href="#st-${esc(v.id)}?tab=reviews">Get your review link</a>.`],
+    ["Price", v.pts.price, 25, rel <= 0 ? `About ${-rel}% below the market average per mg.` : `About ${rel}% above the market average per mg. See below where each vial stands.`],
+    ["Lab reports", v.pts.coa, 20, v.coaKnown ? `A current report on ${v.coaPct}% of the ${v.coaChecked} product pages we could check.${v.coaReused ? ` ${v.coaReused} report${v.coaReused === 1 ? " is" : "s are"} the same file used for other products, which counts for nothing.` : ""} Link each product's own report on its page.` : "We couldn't check your product pages, so this sits at the neutral 10."],
+    ["Shipping", v.pts.ship, 10, ship]];
+  const ranks = pepRanks(v.id);
+  return `<div class="card panel"><div class="bar"><h3>Your score, and what would raise it</h3>${ring(v.score, 44)}</div>
+      <div class="bk stbk">${parts.map(([t, p, m, tip]) => `<div><div class="r"><span>${t}</span><b>${p} / ${m}</b></div><div class="cbar"><i style="width:${p / m * 100}%"></i></div><p class="hint">${tip}</p></div>`).join("")}</div>
+      <p class="hint" style="margin-top:12px">Being a partner never changes your score or position. <a class="link" href="/method">How scoring works</a></p></div>
+    <div class="card panel"><div class="bar"><h3>Where your prices stand</h3><span class="mono t3" style="font-size:12px">${ranks.length} vials in stock</span></div>
+      <p class="hint" style="margin-top:4px">Your position on price per vial against every store selling the same peptide and size, after store-wide deals. Other stores aren't named.</p>
+      <div class="stscroll"><table class="tbl stranks"><thead><tr><th>Vial</th><th class="stp">Your price</th><th>Position</th><th>Gap to lowest</th></tr></thead><tbody>${ranks.slice(0, 60).map(r => `<tr><td>${esc(r.pep)} <span class="t3">${esc(sizeTxt(r.size))}</span></td><td class="mono stp">${money2(r.you)}</td><td><span class="pill ${r.pos === 1 ? "p-ok" : r.pos <= Math.ceil(r.of / 3) ? "" : "p-warn"}">#${r.pos} of ${r.of}</span></td><td class="mono">${r.pos === 1 ? "Lowest" : "+" + money2(r.you - r.low)}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+function pReviews(v, P) {
+  const url = reviewsUrl(v.id);
+  return `<div class="card panel"><div class="row" style="gap:14px"><b class="mono" style="font-size:34px">${v.rvN ? v.rvAvg.toFixed(1) : "—"}</b><div>${v.rvN ? stars(v.rvAvg) : ""}<div class="hint">${v.rvN || 0} verified review${v.rvN === 1 ? "" : "s"}</div></div></div>
+      <h3 style="margin-top:16px">Your review link</h3><p class="t2" style="margin-top:4px">Share it in your order and shipping emails. Buyers upload a receipt, we check it, then delete it.</p>
+      <div class="row stcopy" style="margin-top:10px"><input class="authin mono" readonly value="${esc(url)}" aria-label="Your review link"><button class="btn" type="button" data-stcopy="${esc(url)}">Copy link</button></div>
+      <p class="hint" style="margin-top:12px">Ask every buyer, not only the happy ones, and don't offer anything in exchange for a review. Reviews we find were rewarded are removed.</p></div>
+    ${RV.recent.filter(r => r.v === v.id).slice(0, 6).map(r => reviewItem(r)).join("") ? `<div class="card panel"><h3>Recent reviews</h3>${RV.recent.filter(r => r.v === v.id).slice(0, 6).map(r => reviewItem(r)).join("")}<a class="link" href="#v-${esc(v.id)}?rv=1">All reviews on your public page</a></div>` : ""}`;
+}
+const SYSTEMS = ["AffiliateWP", "GoAffPro", "Refersion", "Dub Partners", "UpPromote", "Something else", "Code only"];
+function pPartner(v, P) {
+  const p = P.partner || {}, run = PARTNER_RUN && PARTNER_RUN.id === v.id ? PARTNER_RUN : null;
+  const checks = (run?.checks || p.checks || []);
+  const st = run?.status || p.status;
+  const chk = checks.length ? `<ul class="stchecks">${checks.map(c => `<li class="${c.ok === true ? "ok" : c.ok === false ? "bad" : "wait"}"><span aria-hidden="true">${c.ok === true ? "✓" : c.ok === false ? "✕" : "…"}</span><span>${esc(c.msg)}</span></li>`).join("")}</ul>` : "";
+  const head = p.founding ? `<div class="card panel stpartner"><span class="pill p-ok">Partner · free for life</span><h3 style="margin-top:10px">You're a founding partner: no commission, ever</h3><p class="t2" style="margin-top:6px">You get every partner benefit, including the partner badge on your buy links and the full numbers in this portal. Add a buyer discount code below and it shows next to your prices.</p></div>`
+    : st === "live" ? `<div class="card panel stpartner"><span class="pill p-ok">Partner</span><h3 style="margin-top:10px">You're live</h3><p class="t2" style="margin-top:6px">Your code shows next to your prices, and your buy links and carts carry the referral. Change anything below; we re-check before it goes live.</p></div>`
+    : `<div class="card panel stpartner"><h3>Become a PepSeekr partner</h3><p class="t2" style="margin-top:6px">PepSeekr buyers get your discount code next to your prices, and we earn a commission through your own affiliate system. We check everything automatically; when it passes you're live within minutes.</p><p class="hint" style="margin-top:8px">Being a partner never changes your score, position or prices on PepSeekr, and partner links are marked as paid.</p></div>`;
+  const fv = (k, d) => p[k] ?? d ?? "";
+  return `${head}
+    <form class="card panel stform" id="partnerForm" data-store="${esc(v.id)}">
+      ${p.founding ? "" : `<label class="lbl" for="pfSys">1. Your affiliate system</label><select id="pfSys" name="system" class="authin">${SYSTEMS.map(s => `<option ${fv("system") === s ? "selected" : ""}>${s}</option>`).join("")}</select>
+      <label class="lbl" for="pfRef">2. PepSeekr's referral link</label><p class="hint">In your affiliate system, add an affiliate account for <b>partners@pepseekr.com</b>, then paste the referral link it gives you. We add it to every buy link and cart we send you.</p>
+      <input id="pfRef" name="ref" class="authin" type="url" inputmode="url" placeholder="https://${esc(hostOf(v.url))}/?ref=…" value="${esc(fv("ref_link"))}">
+      <label class="lbl" for="pfCom">3. Commission you pay PepSeekr</label><div class="row stpct"><input id="pfCom" name="commission" class="authin mono" type="number" inputmode="decimal" min="10" max="50" step="0.5" value="${esc(fv("commission_pct", 10))}"><span>%</span></div><p class="hint">10% minimum, paid from your affiliate system on your normal schedule.</p>`}
+      <label class="lbl" for="pfCode">${p.founding ? "Buyer discount code (optional)" : "4. A discount code for PepSeekr buyers"}</label>
+      <div class="row stcode"><input id="pfCode" name="code" class="authin mono" autocapitalize="characters" maxlength="30" placeholder="PEPSEEKR" value="${esc(fv("code"))}"><div class="row stpct"><input name="pct" class="authin mono" type="number" inputmode="decimal" min="5" max="60" step="0.5" value="${esc(fv("code_pct", 10))}" aria-label="Percent off"><span>% off</span></div></div>
+      <p class="hint">5% minimum. It shows next to your prices and is counted in buyers' totals.</p>
+      <label class="stagree"><input type="checkbox" name="agree" required ${p.agreed_at && st !== "left" ? "checked" : ""}><span>I understand being a partner never changes our score, position or prices on PepSeekr, and our links are marked as paid. We'll ${p.founding ? "" : "pay PepSeekr's commission through our affiliate system and "}keep the code active, or update it here before it changes.</span></label>
+      ${chk}
+      <div class="row" style="gap:10px;justify-content:space-between;flex-wrap:wrap;margin-top:6px">${st === "live" && !p.founding ? `<button class="link" type="button" data-pleave="${esc(v.id)}">Leave the program</button>` : "<span></span>"}<button class="btn p" type="submit" ${run?.busy ? "disabled" : ""}>${run?.busy ? "Checking…" : st === "live" ? "Save and re-check" : "Submit and check"}</button></div>
+      <p class="hint">What we check: your referral link opens your store and keeps the referral; your code is accepted in a cart (we add one item, apply the code, then empty the cart; nothing is ordered); the code takes at least 5% off${p.founding ? "" : "; the commission is 10% or more"}. If one doesn't pass, we tell you which and why.</p>
+    </form>`;
+}
+function pDetails(v, P) {
+  const d = P.details || {}, owner = (MYSTORES || []).some(s => s.id === v.id && (s.role === "owner" || s.role === "admin"));
+  return `<form class="card panel stform" id="detailsForm" data-store="${esc(v.id)}"><h3>Store details</h3>
+      <label class="lbl" for="sdShip">Free shipping on orders over</label><div class="row stpct"><span>$</span><input id="sdShip" name="ship" class="authin mono" type="number" inputmode="decimal" min="0" max="5000" step="1" placeholder="None" value="${d.free_ship_over ?? ""}"></div>
+      <p class="hint">${d.free_ship_src === "store" ? "You entered this. We check it against your site." : "Found on your site. Correct it if it's wrong."} Leave it empty if you don't offer free shipping.</p>
+      <label class="lbl" for="sdEmail">Email for review notices</label><input id="sdEmail" name="email" class="authin" type="email" inputmode="email" value="${esc(d.review_email || "")}" placeholder="support@${esc(hostOf(v.url))}">
+      <label class="stagree"><input type="checkbox" name="notify" ${d.review_emails !== false ? "checked" : ""}><span>Email us when a new verified review is posted</span></label>
+      ${d.promo_text ? `<label class="lbl">Current store-wide deal</label><p class="t2">${esc(d.promo_text)}</p><p class="hint">Found on your site and checked daily. If it's ended, it drops off at the next check.</p>` : ""}
+      <button class="btn p" type="submit" style="margin-top:8px">Save details</button></form>
+    <div class="card panel"><h3>Teammates</h3><p class="hint" style="margin-top:4px">Everyone here can see this portal and change store details and the partner program.</p>
+      <ul class="stlist">${(P.members || []).map(m => `<li class="row" style="justify-content:space-between;padding:8px 0;border-top:1px solid var(--border)"><span>${esc(m.email)} <small class="hint">${m.role === "owner" ? "Owner" : m.status === "pending" ? "Pending" : "Teammate"}</small></span>${owner && m.role !== "owner" ? `<button class="link" type="button" data-stmrm="${esc(v.id)}|${esc(m.email)}">Remove</button>` : ""}</li>`).join("")}</ul>
+      ${owner ? `<form class="row stcopy" id="memberForm" data-store="${esc(v.id)}" style="margin-top:10px"><input name="email" class="authin" type="email" inputmode="email" placeholder="teammate@${esc(hostOf(v.url))}" required aria-label="Teammate's email"><button class="btn" type="submit">Add</button></form><p class="hint">They sign in to PepSeekr with that email first, then you add them.</p>` : ""}</div>`;
+}
+
+/* ---------- events ---------- */
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.matches?.("[data-stpick]")) { CLAIM.pick = t.value; CLAIM.msg = ""; if (SESS) route(true); else { const h = t.closest(".panel")?.querySelector(".hint"); if (h) h.innerHTML = `Sign in with an email at your store's own domain, like you@${esc(V[t.value] ? hostOf(V[t.value].url) : "yourstore.com")}, or the address published on your site, and you're in straight away. With any other email, we verify you by hand within a day.`; store.set("pk_claim", t.value); } }
+  if (t.matches?.("[data-stjump]") && t.value) go("#st-" + t.value);
+});
+document.addEventListener("click", async e => {
+  const t = e.target.closest?.("[data-stclaim],[data-stdecide],[data-stcopy],[data-pleave],[data-stmrm]"); if (!t) return;
+  if (t.dataset.stclaim != null) {
+    CLAIM.busy = true; CLAIM.msg = ""; route(true);
+    const { data, error } = await sbc().rpc("pk_store_claim", { p_vendor: CLAIM.pick });
+    CLAIM.busy = false;
+    if (error) { CLAIM.msg = "We couldn't claim that store. Try again."; route(true); return; }
+    const id = CLAIM.pick; CLAIM = { pick: "", busy: false, msg: data.status === "active" ? "" : `Thanks. We'll verify you within a day and email ${SESS.user.email} when you're in.` };
+    store.set("pk_claim", ""); await loadMyStores(true);
+    if (data.status === "active") { toast("You're in. This is your store portal.", 3500, "ok"); go("#st-" + id); }
+  }
+  if (t.dataset.stdecide) { const [vid, em, ok] = t.dataset.stdecide.split("|"); await sbc().rpc("pk_store_decide", { p_vendor: vid, p_email: em, p_ok: ok === "1" }); toast(ok === "1" ? "Approved" : "Declined", 2000, "ok"); loadMyStores(true); }
+  if (t.dataset.stcopy) { try { await navigator.clipboard.writeText(t.dataset.stcopy); toast("Link copied", 1800, "ok"); } catch { toast("Couldn't copy. Select the link and copy it.", 3000, "warn"); } }
+  if (t.dataset.pleave) { if (!confirmLeave(t)) return; await sbc().rpc("pk_partner_leave", { p_vendor: t.dataset.pleave }); toast("You've left the partner program. Your code and referral are off.", 3500, "ok"); PARTNER_RUN = null; loadPortal(t.dataset.pleave, true); }
+  if (t.dataset.stmrm) { const [vid, em] = t.dataset.stmrm.split("|"); await sbc().rpc("pk_store_member", { p_vendor: vid, p_email: em, p_remove: true }); toast("Removed", 1800, "ok"); loadPortal(vid, true); }
+});
+// leaving takes a second tap rather than a browser dialog
+function confirmLeave(btn) { if (btn.dataset.sure) return true; btn.dataset.sure = "1"; btn.textContent = "Tap again to leave"; setTimeout(() => { delete btn.dataset.sure; btn.textContent = "Leave the program"; }, 4000); return false; }
+document.addEventListener("submit", async e => {
+  const f = e.target;
+  if (f.id === "partnerForm") {
+    e.preventDefault(); const id = f.dataset.store, fd = new FormData(f);
+    PARTNER_RUN = { id, busy: true }; route(true);
+    const { error } = await sbc().rpc("pk_partner_submit", { p_vendor: id, p_system: fd.get("system") || null, p_ref_link: fd.get("ref") || null, p_commission: fd.get("commission") ? +fd.get("commission") : null, p_code: fd.get("code") || null, p_code_pct: fd.get("pct") ? +fd.get("pct") : null, p_agree: !!fd.get("agree") });
+    if (error) { PARTNER_RUN = { id, busy: false, checks: [{ ok: false, msg: /agree/.test(error.message) ? "Tick the box to agree to the partner terms." : "We couldn't save that. Try again." }] }; route(true); return; }
+    try {
+      const r = await fetch(`${SB}/functions/v1/pk-partner-check`, { method: "POST", headers: { apikey: KEY, Authorization: "Bearer " + SESS.access_token, "Content-Type": "application/json" }, body: JSON.stringify({ vendor: id }) });
+      const j = await r.json(); PARTNER_RUN = { id, busy: false, status: j.status, checks: j.checks || [{ ok: false, msg: "The checks didn't run. Try again." }] };
+      toast(j.status === "live" ? "You're a partner. Your code shows on the next price check." : j.status === "checking" ? "Saved. We'll finish checking by hand within a day." : "Some checks didn't pass. See below.", 4000, j.status === "failed" ? "warn" : "ok");
+    } catch { PARTNER_RUN = { id, busy: false, checks: [{ ok: false, msg: "Couldn't reach PepSeekr. Check your connection and try again." }] }; }
+    loadPortal(id, true); route(true);
+  }
+  if (f.id === "detailsForm") {
+    e.preventDefault(); const id = f.dataset.store, fd = new FormData(f), ship = String(fd.get("ship") || "").trim();
+    const { error } = await sbc().rpc("pk_store_save", { p_vendor: id, p_free_ship: ship === "" ? null : +ship, p_review_email: String(fd.get("email") || "").trim(), p_review_emails: !!fd.get("notify") });
+    toast(error ? (/bad_email/.test(error.message) ? "That email address doesn't look right." : /bad_amount/.test(error.message) ? "Enter an amount between $0 and $5,000." : "We couldn't save that. Try again.") : "Saved. Your score updates on the next price check.", 3500, error ? "warn" : "ok");
+    if (!error) loadPortal(id, true);
+  }
+  if (f.id === "memberForm") {
+    e.preventDefault(); const id = f.dataset.store, em = String(new FormData(f).get("email") || "").trim();
+    const { data, error } = await sbc().rpc("pk_store_member", { p_vendor: id, p_email: em });
+    toast(error ? "We couldn't add them. Check the email." : data?.ok ? `Added ${em}` : `${em} hasn't signed in to PepSeekr yet. Ask them to sign in once, then add them again.`, 4500, error || !data?.ok ? "warn" : "ok");
+    if (data?.ok) loadPortal(id, true);
+  }
+});
+
 function reviewItem(r, withVendor) {
   const v = V[r.v];
   return `<div class="rv"><div class="who"><b>${esc(r.name)}</b><span class="pill p-brand">Verified buyer</span><span class="t3">${r.at ? new Date(r.at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}</span></div>
@@ -1755,7 +1969,7 @@ function route(keepScroll) {
     if (pep && hq.get("s")) curSize[pep] = hq.get("s");
     FOCUS_V = hq.get("v") || null;
   } else if (!h.startsWith("p-")) FOCUS_V = null;
-  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("c-") ? vCompare(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : h === "sales" ? vSales() : h === "doc" ? vDoc() : vHome();
+  const view = h.startsWith("p-") ? vProduct(h.slice(2)) : h.startsWith("st-") ? vPortal(h.slice(3)) : h === "stores" ? vStores() : h.startsWith("c-") ? vCompare(h.slice(2)) : h.startsWith("v-") ? vVendor(h.slice(2)) : h === "vendors" || h === "seller-log" ? vVendors() : h === "coa" ? vCoa() : h === "protocol" ? vProtocol() : h === "alerts" ? vAlerts("alerts") : h === "watchlist" ? vAlerts("watchlist") : h === "search" ? vSearch() : h === "account" ? vAccount() : h === "stats" ? vStats() : h === "sales" ? vSales() : h === "doc" ? vDoc() : vHome();
   $("#view").innerHTML = view;
   document.body.classList.toggle("buybar", h.startsWith("p-") && !!$("[data-pep]"));
   if (h.startsWith("p-")) buyBar();
@@ -1774,6 +1988,8 @@ function route(keepScroll) {
   if (own) {} else
   if (pv) { document.title = `${pv.dataset.pep} prices by vendor | PepSeekr`; }
   else if (h.startsWith("c-")) { const [ca, cb] = h.slice(2).split("-vs-"); if (V[ca] && V[cb]) document.title = `${V[ca].name} vs ${V[cb].name}: prices, scores, shipping | PepSeekr`; }
+  else if (h === "stores") document.title = "PepSeekr for stores";
+  else if (h.startsWith("st-")) document.title = `Store portal: ${storeName(h.slice(3))} | PepSeekr`;
   else if (h.startsWith("v-") && V[h.slice(2)]) document.title = `${V[h.slice(2)].name}: score, prices, reviews | PepSeekr`;
   else document.title = { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] ? { vendors: "Vendors", coa: "COA library", list: "My list", alerts: "Alerts", watchlist: "Watchlist", search: "Search" }[h] + " | PepSeekr" : "PepSeekr: the peptide price index";
   if (h === "vendors" || h === "seller-log") { loadLog(); if (ownerKey()) renderOwner(); }
